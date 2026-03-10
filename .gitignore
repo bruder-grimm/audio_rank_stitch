@@ -1,0 +1,9 @@
+.history
+.venv
+__pycache__
+*.pyc
+*.wav
+*.json
+.DS_Store
+build
+*.egg-info
