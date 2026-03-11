@@ -3,7 +3,6 @@ from collections import defaultdict
 from numpy import int16
 import numpy as np
 from numpy.typing import NDArray
-import torch
 import whisperx
 
 from util.Logger import Logger
@@ -37,13 +36,15 @@ class Transcribe:
         Transcribe int16 numpy audio to text with alignment.
         Returns dict with 'text' and 'segments' (including word timestamps).
         """
-        audio_float32 = audio.astype(np.float32) / 32768.0
+        
         # Right, so this is a whole can of worms
-        # Flatten to 1D for mono
+        # 1. We convert, cast, and flatten our audio data
+        #   whisperx needs float32, and (time, ) as shape
+        audio_float32 = audio.astype(np.float32) / 32768.0
         if audio_float32.ndim == 2:
             audio_float32 = audio_float32.squeeze(1)  # (time, 1) -> (time,)
 
-        # 1. Transcribe with 1D array
+        # 2. We transcribe with this new 1D array
         result = self.transcription_model.transcribe(
             audio_float32,
             batch_size=self.batch_size,
@@ -51,24 +52,20 @@ class Transcribe:
             task="translate"
         )
 
+        # Bonus: we fail
         if len(result["segments"]) == 0:
             self.logger.error("Coulnt' transcribe audio")
             return Failure(NoTranscriptionError())
         
+        # ...unless 👀
         self.logger.debug(f"Successfully transcribed:\n {result["segments"]}")
 
-        # 2. Convert for alignment — pass flat float32 numpy array, NOT a tensor
-        # whisperx.align expects shape (time,) for mono or handles it internally
-        audio_for_align = audio_float32  # shape: (time,) or (time, 1)
-        if audio_for_align.ndim == 2 and audio_for_align.shape[1] == 1:
-            audio_for_align = audio_for_align.squeeze(1)  # (time,)
-
-        # 3. Align
+        # 3. We align
         result_aligned = whisperx.align(
             result["segments"],
             self.alignment_model,
             self.metadata,
-            audio_for_align,
+            audio_float32,
             self.device,
             return_char_alignments=False
         )
@@ -89,11 +86,14 @@ class Transcribe:
         """
         words = defaultdict(list)
         self.logger.debug("Begin word slicing")
+
         for segment in transcription["segments"]:
             for word_info in segment["words"]:
                 self.logger.debug(f"Processing {word_info}")
+
                 start_sample = int(word_info["start"] * samplerate)
                 end_sample = int(word_info["end"] * samplerate)
+
                 word_audio = audio[start_sample:end_sample]
                 words[word_info["word"]].append(word_audio)
 

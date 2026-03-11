@@ -33,6 +33,7 @@ if __name__ == "__main__":
                 transcription = transcriber.transcribe(last_recording)
                 if transcription.is_failure():
                     continue
+                
                 logger.debug("we're here")
                 words_with_audio = transcriber.get_words_with_audio(last_recording, transcription.get_value(), SAMPLERATE)
                 logger.debug("we're there")

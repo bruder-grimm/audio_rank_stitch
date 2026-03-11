@@ -1,5 +1,8 @@
 
 
+from collections import defaultdict
+
+
 def top_k(words: dict[str, int], k: int) -> list[tuple[str, int]]:
     """
     Return the top k words from the array
@@ -11,12 +14,12 @@ def as_ranked(strings: list[str]) -> dict[str, int]:
     Takes a list of strings, counts the occurance of duplicates, and 
     returns a dict of unique strings with their occurance counts
     """
-    result = {}
+    result = defaultdict(int)
     for string in strings:
         string = string.lower().strip()  # sanitize for my sanity
         result[string] += 1
 
-    return result
+    return dict(result)
 
 def accumulate_rankings(left: dict[str, int], right: dict[str, int]) -> dict[str, int]:
     """
@@ -24,6 +27,8 @@ def accumulate_rankings(left: dict[str, int], right: dict[str, int]) -> dict[str
     other loaded or in-flight rankings
     """
     for string, count in left.items():
+        if string not in right:
+            right[string] = 0
         right[string] += count
 
     return right
