@@ -9,15 +9,15 @@ class Player():
         self.samplerate = samplerate
 
     def play(self, wave: NDArray[int16], attack: float = 0.5, decay: float = 0.5) -> None:
-        """
-        Does what it says on the tin my guy
-        """
-        n_attack = int(self.samplerate * attack)
-        n_decay = int(self.samplerate * decay)
+        wave_1d = wave.flatten()
+        total = len(wave_1d)
 
-        env = np.ones(len(wave))
+        n_attack = min(int(self.samplerate * attack), total // 2)
+        n_decay = min(int(self.samplerate * decay), total // 2)
+
+        env = np.ones(total)
         env[:n_attack] = np.linspace(0, 1, n_attack)
         env[-n_decay:] = np.linspace(1, 0, n_decay)
 
-        sd.play(wave * env, self.samplerate)
+        sd.play((wave_1d * env).astype(np.int16), self.samplerate)
         sd.wait()

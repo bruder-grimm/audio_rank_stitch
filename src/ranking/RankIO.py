@@ -1,3 +1,4 @@
+from collections import defaultdict
 import json
 from pathlib import Path
 from typing import Dict, Optional
@@ -9,10 +10,14 @@ RANKINGS_FILE = "rankings.json"
 class RankIOError(Exception):
     pass
 
+class NoAudioFilesError(Exception):
+    pass
+
 
 class RankIO():
     def __init__(self, path: Path, logger: Logger) -> None:
-        self.path = path / RANKINGS_FILE
+        self.working_directory = path
+        self.ranking_file = path / RANKINGS_FILE
         self.logger = logger
         self.buffer: Optional[dict[str, int]] = None
 
@@ -22,7 +27,7 @@ class RankIO():
         Returns number of entries on success.
         """
         try:
-            self.logger.debug(f"Trying to save rankings. WD is {self.path.absolute}")
+            self.logger.debug(f"Trying to save rankings. WD is {self.working_directory.absolute}")
             return Success(self._buffered_write(rankings))
         
         except OSError:  # we're done here
@@ -30,6 +35,31 @@ class RankIO():
             raise
         except Exception as e:
             return Failure(RankIOError(e))
+        
+    def generate_rankings(self) -> Result[dict[str, int], NoAudioFilesError]:
+        """
+        Generates a rankings dictionary based on present word snippets.
+        """
+        result = defaultdict(int)
+        self.logger.debug(f"Generating rankings from {self.working_directory}")
+        for word_dir in self.working_directory.iterdir():
+            if not word_dir.is_dir():
+                continue
+
+            self.logger.debug(f"Found word {word_dir}")
+            for file in word_dir.iterdir():
+                if not file.is_file():
+                    continue
+
+                word = word_dir.name.lower().strip()
+                self.logger.debug(f"Add one to {word}")
+                result[word] += 1
+
+        if len(result) == 0:
+            return Failure(NoAudioFilesError())
+
+        return Success(dict(result))
+
 
 
     def load_rankings(self) -> Result[dict[str, int], RankIOError]:
@@ -39,17 +69,17 @@ class RankIO():
         If the file does not exist this will fail
         """
         try:
-            self.logger.debug(f"Loading rankings from {self.path.absolute}")
+            self.logger.debug(f"Loading rankings from {self.ranking_file.absolute}")
             return Success(self._buffered_read())
         
         except FileNotFoundError:
-            return Failure(RankIOError(f"Ranking file not found at {self.path.absolute}"))
+            return Failure(RankIOError(f"Ranking file not found at {self.ranking_file.absolute}"))
         except Exception as e:
             return Failure(RankIOError(e))
         
     def _buffered_read(self) -> dict[str, int]:
         if not self.buffer:
-            with open(self.path, "r", encoding="utf-8") as f:
+            with open(self.ranking_file, "r", encoding="utf-8") as f:
                 buffer = json.load(f)
                 self.buffer = buffer
                 return buffer
@@ -57,8 +87,8 @@ class RankIO():
             return self.buffer
         
     def _buffered_write(self, rankings: dict[str, int]) -> int:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.path, "w", encoding="utf-8") as f:
+        self.ranking_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.ranking_file, "w", encoding="utf-8") as f:
             json.dump(rankings, f, indent=2)
 
         self.buffer = rankings

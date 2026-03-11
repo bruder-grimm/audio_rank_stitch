@@ -9,7 +9,7 @@ class PlaybackWindow(tk.Tk):
     def __init__(self, audio_player: Player, logger: Logger):
         super().__init__()
         self.title("Audio Playback Window")
-        self.geometry("400x400")
+        self.geometry("600x900")
 
         self.logger: Logger = logger
         self.audio_player: Player = audio_player

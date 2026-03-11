@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Callable, Generic, TypeVar, cast
 
 T = TypeVar("T")  # success type
 E = TypeVar("E", bound=Exception)  # error type
@@ -24,20 +24,35 @@ class Result(Generic[T, E]):
         else:
             raise ValueError("Cannot get error from a Success result")
         
-    def map(self, func) -> "Result":
+    def map[U](self, func: Callable[[T], U]) -> "Result[U, E]":
         if self.is_success():
             try:
                 return Success(func(self.get_value()))
             except Exception as e:
-                return Failure(e)
+                return cast("Result[U, E]", Failure(e))
         else:
-            return self  # type: ignore
+            return cast("Result[U, E]", self)  # type: ignore
+
+    def flat_map[U](self, func: Callable[[T], "Result[U, E]"]) -> "Result[U, E]":
+        if self.is_success():
+            try:
+                return func(self.get_value())
+            except Exception as e:
+                return cast("Result[U, E]", Failure(e))
+        else:
+            return cast("Result[U, E]", self)
         
     def get_or_else(self, default: T) -> T:
         if self.is_success():
             return self.get_value()
         else:
             return default
+        
+    def or_else[X: Exception](self, default: Callable[[], "Result[T, X]"]) -> "Result[T, X]":
+        if self.is_success():
+            return cast("Result[T, X]", self)
+        else:
+            return default()
         
 
 @dataclass

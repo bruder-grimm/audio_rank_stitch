@@ -11,6 +11,7 @@ from ui.PlaybackWindow import PlaybackWindow
 from util.Logger import Logger
 
 from config import LOGLEVEL, SAMPLERATE, PATH
+from util.Result import Result
 
 
 if __name__ == "__main__":
@@ -33,14 +34,20 @@ if __name__ == "__main__":
 
     def worker():
         while True:
-            rankings = rank_io.load_rankings()
-            top_words: list[tuple[str, int]] = rankings\
-                .map(lambda ranks: Rank.top_k(ranks, 5))\
-                .get_or_else([])
+            rankings = rank_io.load_rankings()\
+                .or_else(rank_io.generate_rankings)
+            
+            if rankings.is_failure():
+                logger.debug("Couldn't load or generate rankings, skipping shuffle and playback")
+                threading.Event().wait(3)
+                continue
+
+            top_words = Rank.top_k(rankings.get_value(), app.top_k)
+            app.set_words(top_words)
             
             word_snippets = { 
                 word: disk_io.load_waves_for(word).get_or_else([])
-                for word, _ in top_words 
+                for word, _ in top_words
             }
 
             shuffle = Shuffle(word_snippets, rankings.get_value(), logger)
@@ -54,8 +61,6 @@ if __name__ == "__main__":
             else:
                 logger.debug("No audio in playback queue")
                 threading.Event().wait(3)
-
-            app.set_words(top_words)
             
 
     threading.Thread(target=worker, daemon=True).start()
