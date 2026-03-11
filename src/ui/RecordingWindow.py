@@ -1,7 +1,7 @@
 import tkinter as tk
 import time
-from src.recording.Record import Recorder
-from util.logger import Logger
+from audio.Record import Recorder
+from util.Logger import Logger
 
 class RecordingWindow(tk.Tk):
     def __init__(self, recorder: Recorder, logger: Logger):
@@ -14,6 +14,15 @@ class RecordingWindow(tk.Tk):
 
         self.is_recording = False
         self.start_time = 0.0
+
+        # last sentence display
+        self.last_sentence_text = tk.Text(self,
+                                          height=4,
+                                          wrap=tk.WORD,
+                                          font=("Helvetica", 14))
+        self.last_sentence_text.insert(tk.END, "Last sentence will appear here.")
+        self.last_sentence_text.config(state=tk.DISABLED)   # read‑only
+        self.last_sentence_text.pack(padx=20, pady=10, fill=tk.BOTH, expand=True)
 
         self.status_label = tk.Label(self, text="Press spacebar to start recording", font=("Helvetica", 16))
         self.status_label.pack(padx=20, pady=10)
@@ -42,6 +51,14 @@ class RecordingWindow(tk.Tk):
             self.recorder.stop()
             self.is_recording = False
             self.status_label.config(text="Recording stopped. Press spacebar to start again.")
+
+
+    def set_last_sentence(self, sentence: str) -> None:
+        """Update the big text field with the latest recorded sentence."""
+        self.last_sentence_text.config(state=tk.NORMAL)
+        self.last_sentence_text.delete("1.0", tk.END)
+        self.last_sentence_text.insert(tk.END, sentence)
+        self.last_sentence_text.config(state=tk.DISABLED)
 
     def update_time(self):
         if self.is_recording:

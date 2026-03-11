@@ -1,4 +1,11 @@
 
+
+def top_k(words: dict[str, int], k: int) -> list[tuple[str, int]]:
+    """
+    Return the top k words from the array
+    """
+    return sorted(words.items(), key=lambda kv: kv[1], reverse=True)[:k]
+
 def as_ranked(strings: list[str]) -> dict[str, int]:
     """
     Takes a list of strings, counts the occurance of duplicates, and 
@@ -6,7 +13,7 @@ def as_ranked(strings: list[str]) -> dict[str, int]:
     """
     result = {}
     for string in strings:
-        string = string.lower().strip() # sanitize for my sanity
+        string = string.lower().strip()  # sanitize for my sanity
         result[string] += 1
 
     return result

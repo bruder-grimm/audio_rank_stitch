@@ -1,4 +1,7 @@
+from collections import defaultdict
+
 import numpy as np
+from numpy import int16
 from numpy.typing import NDArray
 import whisperx
 
@@ -17,9 +20,9 @@ class Transcribe:
             language_code=language, device=self.device
         )
 
-    def _transcribe(self, audio: NDArray[np.float32]) -> dict:
+    def transcribe(self, audio: NDArray[np.int16]) -> dict:
         """
-        Transcribe float32 numpy audio to text with alignment.
+        Transcribe int16 numpy audio to text with alignment.
         Returns dict with 'text' and 'segments' (including word timestamps).
         """
         result = self.transcription_model.transcribe(
@@ -36,18 +39,22 @@ class Transcribe:
 
         return result  # Return the full dict for access to timestamps
 
-    def get_words_with_audio(self, audio: NDArray[np.float32], samplerate: int = 44100) -> list:
+    def get_words_with_audio(
+            self, 
+            audio: NDArray[int16], 
+            transcription: dict, 
+            samplerate: int = 44100
+        ) -> dict[str, list[NDArray[int16]]]:
         """
         Cuts the audio into segments based on word timestamps.
         Returns a list of (word, audio_segment) tuples.
         """
-        result = self._transcribe(audio)
-        words = []
-        for segment in result["segments"]:
+        words = defaultdict(list)
+        for segment in transcription["segments"]:
             for word_info in segment["words"]:
                 start_sample = int(word_info["start"] * samplerate)
                 end_sample = int(word_info["end"] * samplerate)
                 word_audio = audio[start_sample:end_sample]
-                words.append((word_info["word"], word_audio))
+                words[word_info["word"]].append(word_audio)
         
-        return words
+        return dict(words)

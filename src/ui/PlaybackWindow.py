@@ -3,7 +3,7 @@ from tkinter import ttk
 from typing import Optional, Any
 
 from audio.Play import Player
-from util.logger import Logger
+from util.Logger import Logger
 
 class PlaybackWindow(tk.Tk):
     def __init__(self, audio_player: Player, logger: Logger):
@@ -13,7 +13,8 @@ class PlaybackWindow(tk.Tk):
 
         self.logger: Logger = logger
         self.audio_player: Player = audio_player
-        self.words: Optional[dict[str, int]] = None
+        self.words: Optional[list[tuple[str, int]]] = None
+        self._play_pressed = False  
 
         # word‑count list
         self.listbox = tk.Listbox(self)
@@ -57,14 +58,29 @@ class PlaybackWindow(tk.Tk):
         self.silence_slider.set(1.0)
         self.silence_slider.pack(fill=tk.X, padx=5, pady=2)
 
+        self.top_k_slider = tk.Scale(
+            frame,
+            from_=1,
+            to=10,
+            orient=tk.HORIZONTAL,
+            label="Top K Words",
+            resolution=1
+        )
+        self.top_k_slider.set(5)
+        self.top_k_slider.pack(fill=tk.X, padx=5, pady=2)
+
         # play button
-        self.play_button = ttk.Button(self, text="Play", command=self.play_audio)
+        self.play_button = ttk.Button(self, text="Play", command=self._on_play_pressed)
         self.play_button.pack(pady=10)
 
-    def set_words(self, words: dict[str, int]):
+    def _on_play_pressed(self):
+        """Set the play pressed flag when button is clicked."""
+        self._play_pressed = True
+
+    def set_words(self, words: list[tuple[str, int]]):
         self.words = words
         self.listbox.delete(0, tk.END)  # Clear existing items
-        for word, count in words.items():
+        for word, count in words:
             self.listbox.insert(tk.END, f"{word}: {count}")
 
     @property
@@ -81,12 +97,18 @@ class PlaybackWindow(tk.Tk):
     def silence_duration(self) -> float:
         """Silence duration in seconds (0.1–5)."""
         return self.silence_slider.get()
+    
+    @property
+    def top_k(self) -> int:
+        """Number of top words to consider (based on listbox items)."""
+        return int(self.top_k_slider.get())
 
-    def play_audio(self):
-        # placeholder for real playback; audio_player can be used here
-        self.logger.info(
-            "Playing audio with "
-            f"attack={self.attack}%, decay={self.decay}%, "
-            f"silence={self.silence_duration}s"
-        )
-        # e.g. self.audio_player.play(...)
+    @property
+    def play_pressed(self) -> bool:
+        """Returns True if the play button was pressed since last check."""
+        return self._play_pressed
+
+    @play_pressed.setter
+    def play_pressed(self, value: bool):
+        """Reset the play pressed flag."""
+        self._play_pressed = value

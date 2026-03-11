@@ -1,4 +1,3 @@
-from logging import Logger
 from typing import Optional
 
 from numpy.typing import NDArray
@@ -7,6 +6,7 @@ import numpy as np
 
 from typing import Optional
 
+from util.Logger import Logger
 from util.Result import Result, Success, Failure
 import sounddevice as sd
 import numpy as np
@@ -29,7 +29,7 @@ class Recorder:
     def _callback(self, indata, frames, time, status):
         if self.logger:
             self.logger.info("Received audio data")
-            self.logger.debug(f"Indata shape: {indata.shape}, frames: {frames}, time: {time}, status: {status}")
+            #self.logger.debug(f"Indata shape: {indata.shape}, frames: {frames}, time: {time}, status: {status}")
         self.frames = indata.copy()
 
     def start(self):
@@ -42,12 +42,12 @@ class Recorder:
         self.stream = sd.InputStream(
             samplerate=self.samplerate,
             channels=self.channels,
-            dtype="float32",
+            dtype="int16",
             callback=self._callback,
         )
         self.stream.start()
 
-    def stop(self) -> Result[NDArray[np.float32], RecordingError]:
+    def stop(self) -> Result[NDArray[np.int16], RecordingError]:
         """
         Will stop the recording, return the successfully accumulated audio data
         Or an error in case anything went wrong
