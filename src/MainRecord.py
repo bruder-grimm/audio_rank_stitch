@@ -33,13 +33,18 @@ if __name__ == "__main__":
         while True:
             last_recording = recording_queue.get()
             if last_recording is not None:
+                app.set_last_sentence("Transcribing...")
                 wavfile.write((PATH / f"{int(time())}.wav"), SAMPLERATE, last_recording)
                 transcription = transcriber.transcribe(last_recording)
                 if transcription.is_failure():
                     continue
+                app.set_last_sentence("Aligning...")
 
-                words_with_audio = transcriber.get_words_with_audio(last_recording, transcription.get_value())
+                transcript, alignment_result = transcription.get_value()
+                words_with_audio = transcriber.get_words_with_audio(last_recording, alignment_result)
+                app.set_last_sentence("Saving audio to disk...")
                 disk_io.save_waves(words_with_audio)
+                app.set_last_sentence(transcript)
             
             threading.Event().wait(1)
 
