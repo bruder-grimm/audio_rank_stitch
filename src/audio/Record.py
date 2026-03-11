@@ -1,6 +1,5 @@
 from typing import Optional
 
-from numpy.typing import NDArray
 import sounddevice as sd
 import numpy as np
 
@@ -34,8 +33,6 @@ class Recorder:
         self.logger = logger
 
     def _callback(self, indata, frames, time, status):
-        if self.logger:
-            self.logger.info("Received audio data")
         self.frames.append(indata.copy())
 
     def start(self):
@@ -48,8 +45,8 @@ class Recorder:
         self.stream = sd.InputStream(
             samplerate=self.samplerate,
             channels=self.channels,
-            dtype="int16",
-            blocksize=500,
+            dtype="float32",
+            blocksize=256,
             callback=self._callback,
         )
         self.stream.start()
@@ -75,5 +72,12 @@ class Recorder:
             return
         
         full_audio = np.concatenate(self.frames, axis=0)
+
+        # Add some normalization to prevent clipping and ensure consistent volume levels
+        target_rms = 0.1  # tune this, 0.1 is a good starting point for speech
+        current_rms = np.sqrt(np.mean(full_audio ** 2))
+        full_audio = full_audio * (target_rms / (current_rms + 1e-9))
+        full_audio = np.clip(full_audio, -1.0, 1.0)  # prevent clipping
+
         self.recording_queue.append(full_audio)
         self.frames = []

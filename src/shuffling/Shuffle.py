@@ -1,19 +1,19 @@
 import random
 
-from numpy import int16
+from numpy import float32
 from numpy.typing import NDArray
 
 from util.Logger import Logger
 
 
 class Shuffle:
-    def __init__(self, waves: dict[str, list[NDArray[int16]]], ranks: dict[str, int], logger: Logger) -> None:
+    def __init__(self, waves: dict[str, list[NDArray[float32]]], ranks: dict[str, int], logger: Logger) -> None:
         self.waves = waves
         self.ranks = ranks
         self.words = ranks.keys()
         self.logger = logger
 
-    def get_top_k(self, k: int) -> list[tuple[str, list[NDArray[int16]]]]:
+    def get_top_k(self, k: int) -> list[tuple[str, list[NDArray[float32]]]]:
         top_words = [
             word for word, _ 
             in sorted(self.ranks.items(), key=lambda kv: kv[1], reverse=True)[:k]
@@ -23,9 +23,9 @@ class Shuffle:
     
     def shuffle_top_k(
             self, 
-            words: list[tuple[str, list[NDArray[int16]]]], 
+            words: list[tuple[str, list[NDArray[float32]]]], 
             shuffle_factor: float
-        ) -> list[NDArray[int16]]:
+        ) -> list[NDArray[float32]]:
         """
         Reshuffle the list for to a playable format. Will sample away from the top
         items with probability shuffle_factor!
