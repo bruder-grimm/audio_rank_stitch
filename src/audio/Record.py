@@ -6,6 +6,7 @@ import numpy as np
 
 from typing import Optional
 
+from audio.RecordingQueue import RecordingQueue
 from util.Logger import Logger
 from util.Result import Result, Success, Failure
 import sounddevice as sd
@@ -19,9 +20,16 @@ class StreamClosedError(RecordingError):
 
 
 class Recorder:
-    def __init__(self, samplerate: int = 44100, channels: int = 1, logger: Optional[Logger] = None):
+    def __init__(
+            self,
+            recording_queue: RecordingQueue,
+            logger: Logger,
+            samplerate: int = 44100, 
+            channels: int = 1, 
+        ):
         self.samplerate = samplerate
         self.channels = channels
+        self.recording_queue = recording_queue
         self.frames: Optional[np.ndarray] = None
         self.stream: Optional[sd.InputStream] = None
         self.logger = logger
@@ -47,24 +55,26 @@ class Recorder:
         )
         self.stream.start()
 
-    def stop(self) -> Result[NDArray[np.int16], RecordingError]:
+    def stop(self):
         """
         Will stop the recording, return the successfully accumulated audio data
         Or an error in case anything went wrong
         """
         if self.stream is None:
-            return Failure(StreamClosedError("Stream was not open"))
+            self.logger.error("Stream was not open")
+            return
         if self.frames is None:
-            return Failure(RecordingError("No data has been recorded"))
+            self.logger.error("No data has been recorded")
+            return
         
         try:
             self.stream.stop()
             self.stream.close()
             self.stream = None
         except Exception as e:
-            return Failure(RecordingError(f"Failed to stop stream: {e}"))
+            self.logger.error(f"Failed to stop stream: {e}")
+            return
 
-        result = np.concatenate(self.frames, axis=0)
+        self.recording_queue.append(np.concatenate(self.frames, axis=0))
         self.frames = None
         
-        return Success(result)

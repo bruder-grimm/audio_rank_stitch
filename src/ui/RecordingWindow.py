@@ -51,10 +51,8 @@ class RecordingWindow(tk.Tk):
             self.status_label.config(text="Recording...")
             self.update_time()
 
-
     def on_space_up(self, event):
         self.release_job = self.after(30, self._handle_release)
-
 
     def _handle_release(self):
         self.release_job = None
@@ -64,7 +62,6 @@ class RecordingWindow(tk.Tk):
             self.recorder.stop()
             self.is_recording = False
             self.status_label.config(text="Recording stopped. Press spacebar to start again.")
-
 
     def set_last_sentence(self, sentence: str) -> None:
         """Update the big text field with the latest recorded sentence."""

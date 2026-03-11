@@ -59,26 +59,26 @@ class DiskIO():
             return Failure(e)
         
         return Success([wave for ((_, wave), _) in result])
-        
     
-    def save_waves(self, waves: dict[str, NDArray[int16]]) -> Result[int, Exception]:
+    def save_waves(self, words_with_audio: dict[str, list[NDArray[int16]]]) -> Result[int, Exception]:
         """
         Saves all wave forms to their corresponding folders.
         Will return the number of saved items on success, error on failure
         """
         try:
-            for word, wave in waves.items():
+            for word, waves in words_with_audio.items():
                 path = (self.path / word)
                 path.mkdir(parents=True, exist_ok=True)
 
-                audio_int16 = (wave * 32767).astype(np.int16)
-                wavfile.write(f"{time()}.wav", self.sampling_rate, audio_int16)
+                for wave in waves:
+                    self._buffered_write(path, self.sampling_rate, wave)
 
         except Exception as e:
             self.logger.error(f"Encountered error while saving waves: {e}")
             return Failure(e)
         
-        return Success(len(waves))
+        return Success(len(words_with_audio))
+    
     
     def _buffered_read(self, path: Path) -> tuple[int, NDArray[int16]]:
         if path not in self.buffer.keys():
@@ -89,3 +89,5 @@ class DiskIO():
     
     def _buffered_write(self, path: Path, sampling_rate: int, audio: NDArray[int16]) -> None:
         self.buffer[path] = (sampling_rate, audio)
+        audio_int16 = (audio * 32767).astype(np.int16)
+        wavfile.write((path / f"{time()}.wav"), self.sampling_rate, audio_int16)
