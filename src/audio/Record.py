@@ -8,7 +8,6 @@ from typing import Optional
 
 from audio.RecordingQueue import RecordingQueue
 from util.Logger import Logger
-from util.Result import Result, Success, Failure
 import sounddevice as sd
 import numpy as np
 
@@ -30,15 +29,14 @@ class Recorder:
         self.samplerate = samplerate
         self.channels = channels
         self.recording_queue = recording_queue
-        self.frames: Optional[np.ndarray] = None
+        self.frames: list = []
         self.stream: Optional[sd.InputStream] = None
         self.logger = logger
 
     def _callback(self, indata, frames, time, status):
         if self.logger:
             self.logger.info("Received audio data")
-            #self.logger.debug(f"Indata shape: {indata.shape}, frames: {frames}, time: {time}, status: {status}")
-        self.frames = indata.copy()
+        self.frames.append(indata.copy())
 
     def start(self):
         """
@@ -51,6 +49,7 @@ class Recorder:
             samplerate=self.samplerate,
             channels=self.channels,
             dtype="int16",
+            blocksize=500,
             callback=self._callback,
         )
         self.stream.start()
@@ -74,7 +73,7 @@ class Recorder:
         except Exception as e:
             self.logger.error(f"Failed to stop stream: {e}")
             return
-
-        self.recording_queue.append(np.concatenate(self.frames, axis=0))
-        self.frames = None
         
+        full_audio = np.concatenate(self.frames, axis=0)
+        self.recording_queue.append(full_audio)
+        self.frames = []

@@ -7,7 +7,7 @@ class RecordingWindow(tk.Tk):
     def __init__(self, recorder: Recorder, logger: Logger):
         super().__init__()
         self.title("Recorder")
-        self.geometry("400x300")
+        self.geometry("500x500")
 
         self.recorder: Recorder = recorder
         self.logger: Logger = logger

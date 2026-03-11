@@ -1,6 +1,6 @@
-from collections import defaultdict
 from pathlib import Path
 from time import time
+import re
 
 import numpy as np
 from numpy import int16, int16
@@ -29,7 +29,7 @@ class DiskIO():
         # Since we don't want to endlessly block on IO in what is, for all intents and
         # purposes, a hot path, we're going to reference our already loaded wavs 
         # until we eventually run out of memory lol
-        self.buffer: dict[Path, tuple[int, NDArray[int16]]]
+        self.buffer: dict[Path, tuple[int, NDArray[int16]]] = {}
 
     def load_waves_for(self, word: str) -> Result[list[NDArray[int16]], Exception]:
         """
@@ -67,10 +67,11 @@ class DiskIO():
         """
         try:
             for word, waves in words_with_audio.items():
-                path = (self.path / word)
+                path = (self.path / self._sanitize_filename(word))
                 path.mkdir(parents=True, exist_ok=True)
 
                 for wave in waves:
+                    self.logger.debug(f"saving wav at {path}")
                     self._buffered_write(path, self.sampling_rate, wave)
 
         except Exception as e:
@@ -79,6 +80,9 @@ class DiskIO():
         
         return Success(len(words_with_audio))
     
+
+    def _sanitize_filename(self, name: str) -> str:
+        return re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', name).strip()
     
     def _buffered_read(self, path: Path) -> tuple[int, NDArray[int16]]:
         if path not in self.buffer.keys():

@@ -8,12 +8,10 @@ from ranking import Rank
 from ranking.RankIO import RankIO
 from shuffling.Shuffle import Shuffle
 from ui.PlaybackWindow import PlaybackWindow
-from util.Logger import LogLevel, Logger
+from util.Logger import Logger
 
-LOGLEVEL = LogLevel.DEBUG
+from config import LOGLEVEL, SAMPLERATE, PATH
 
-SAMPLING_RATE = 44100
-PATH = Path("./../word_snippets")
 
 if __name__ == "__main__":
 
@@ -26,9 +24,9 @@ if __name__ == "__main__":
     logger = Logger(LOGLEVEL)
 
     rank_io = RankIO(PATH, logger)
-    disk_io = DiskIO(PATH, logger, SAMPLING_RATE)
+    disk_io = DiskIO(PATH, logger, SAMPLERATE)
 
-    audio_player = Player(SAMPLING_RATE)
+    audio_player = Player(SAMPLERATE)
 
     # Here we go
     app = PlaybackWindow(audio_player, logger)
@@ -54,6 +52,7 @@ if __name__ == "__main__":
                     audio_player.play(audio, attack=app.attack, decay=app.decay)
                     threading.Event().wait(app.silence_duration)
             else:
+                logger.debug("No audio in playback queue")
                 threading.Event().wait(3)
 
             app.set_words(top_words)
