@@ -47,8 +47,8 @@ class DiskIO():
                 self.logger.warn(f"Tried to access waves for word with no waves saved: {word}")
                 raise NoRecordingsError(f"No waves saved for word: {word}")
             
-            # We sort the list in descending order because we want the newest recordings to be playes first
-            for ((sampling_rate, _), file_name) in sorted(result, reverse=True):
+            # We sort the list in descending order because we want the newest recordings to be played first
+            for ((sampling_rate, _), file_name) in sorted(result, key=lambda _: _[1], reverse=True):
                 if sampling_rate != self.sampling_rate:
                     self.logger.error(f"Encountered sample rate mismatch at {file_name}")
                     raise SamplingRateMismatch(f"{file_name} doesn't match given sampling rate of {sampling_rate}")

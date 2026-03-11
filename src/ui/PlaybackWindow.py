@@ -9,7 +9,7 @@ class PlaybackWindow(tk.Tk):
     def __init__(self, audio_player: Player, logger: Logger):
         super().__init__()
         self.title("Audio Playback Window")
-        self.geometry("600x900")
+        self.geometry("500x700")
 
         self.logger: Logger = logger
         self.audio_player: Player = audio_player
@@ -58,6 +58,17 @@ class PlaybackWindow(tk.Tk):
         self.silence_slider.set(1.0)
         self.silence_slider.pack(fill=tk.X, padx=5, pady=2)
 
+        # spice slider (0‑100 %)
+        self.spice_slider = tk.Scale(
+            frame,
+            from_=0,
+            to=100,
+            orient=tk.HORIZONTAL,
+            label="Spice"
+        )
+        self.spice_slider.set(50)
+        self.spice_slider.pack(fill=tk.X, padx=5, pady=2)
+
         self.top_k_slider = tk.Scale(
             frame,
             from_=1,
@@ -84,14 +95,19 @@ class PlaybackWindow(tk.Tk):
             self.listbox.insert(tk.END, f"{word}: {count}")
 
     @property
+    def shuffle_factor(self) -> float:
+        """Shuffle factor between 0 and 1"""
+        return self.spice_slider.get() * 0.01
+
+    @property
     def attack(self) -> float:
-        """Attack value in percent (0–100)."""
-        return self.attack_slider.get()
+        """Attack value between 0 and 1"""
+        return self.attack_slider.get() * 0.01
 
     @property
     def decay(self) -> float:
-        """Decay value in percent (0–100)."""
-        return self.decay_slider.get()
+        """Decay value between 0 and 1"""
+        return self.decay_slider.get() * 0.01
 
     @property
     def silence_duration(self) -> float:

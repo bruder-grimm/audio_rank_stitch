@@ -2,6 +2,7 @@
 """ A class that simply logs to the terminal, with a timestamp and a log level. """
 import datetime
 from enum import Enum
+import inspect
 
 class LogLevel(Enum):
     DEBUG = 0
@@ -23,7 +24,10 @@ class Logger():
         self.log(LogLevel.WARNING, message)
 
     def error(self, message: str):
-        self.log(LogLevel.ERROR, message)
+        file = inspect.stack()[1].filename
+        caller = inspect.stack()[1].function
+        line_no = inspect.stack()[1].lineno
+        self.log(LogLevel.ERROR, f"[{file}.{caller}:{line_no}] {message}")
 
     def log(self, level: LogLevel, message: str):
         if self.level.value <= level.value:

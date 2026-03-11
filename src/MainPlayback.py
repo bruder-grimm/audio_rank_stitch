@@ -34,6 +34,11 @@ if __name__ == "__main__":
 
     def worker():
         while True:
+            # Careful: Race conditions may happen: every run through this should make values
+            # immutable - that means:
+            # deference -> use -> discard
+            current_top_k = app.top_k
+
             # ... should we even load rankings or always generate them?
             # Loaded rankings will always be outdated, unless there was no new audio added
             # How do we detect a change in present audio files?
@@ -46,7 +51,7 @@ if __name__ == "__main__":
                 continue
 
             # Okay so we get the top k words
-            top_words = Rank.top_k(rankings.get_value(), app.top_k)
+            top_words = Rank.top_k(rankings.get_value(), current_top_k)
             app.set_words(top_words)
             
             # Then we get all waves for the top k words...
@@ -58,8 +63,8 @@ if __name__ == "__main__":
             # Then we get the top k words... again? I guess I wanted to do mapping between
             # words and spoken words, but semantically this makes me sick
             shuffle = Shuffle(word_snippets, rankings.get_value(), logger)
-            top_k = shuffle.get_top_k(app.top_k)
-            shuffled = shuffle.shuffle_top_k(top_k, shuffle_factor=0.3)
+            top_k = shuffle.get_top_k(current_top_k)
+            shuffled = shuffle.shuffle_top_k(top_k, app.shuffle_factor)
 
             # all g
             if app.play_pressed:
