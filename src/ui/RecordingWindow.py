@@ -14,6 +14,7 @@ class RecordingWindow(tk.Tk):
 
         self.is_recording = False
         self.start_time = 0.0
+        self.release_job = None
 
         # last sentence display
         self.last_sentence_text = tk.Text(self,
@@ -37,6 +38,11 @@ class RecordingWindow(tk.Tk):
 
 
     def on_space_down(self, event):
+        if self.release_job is not None:
+            self.after_cancel(self.release_job)
+            self.release_job = None
+            return  # autorepeat press
+
         self.logger.debug("Spacebar pressed -> Start recording from UI")
         if not self.is_recording:
             self.recorder.start()
@@ -45,8 +51,15 @@ class RecordingWindow(tk.Tk):
             self.status_label.config(text="Recording...")
             self.update_time()
 
+
     def on_space_up(self, event):
+        self.release_job = self.after(30, self._handle_release)
+
+
+    def _handle_release(self):
+        self.release_job = None
         self.logger.debug("Spacebar released -> Stop recording from UI")
+
         if self.is_recording:
             self.recorder.stop()
             self.is_recording = False
