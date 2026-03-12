@@ -1,3 +1,5 @@
+import math
+import os
 import threading
 
 from pathlib import Path
@@ -6,7 +8,9 @@ from audio.DiskIO import DiskIO
 from audio.Play import Player
 from ranking import Rank
 from ranking.RankIO import RankIO
-from shuffling.Shuffle import Shuffle
+from sequencing.Mixer import Mixer
+from sequencing.Sequencer import Sequencer
+from sequencing.Shuffle import Shuffle
 from ui.PlaybackWindow import PlaybackWindow
 from util.Logger import Logger
 
@@ -32,41 +36,71 @@ if __name__ == "__main__":
     # Here we go (again)
     app = PlaybackWindow(audio_player, logger)
 
+
     def worker():
         while True:
-            # Careful: Race conditions may happen: every run through this should make values
-            # immutable - that means:
+            # Careful: Race conditions may happen here since we get modified values from the frontend
+            # every run through this should make values as immutable as possible - that means:
             # deference -> use -> discard
             current_top_k = app.top_k
 
-            # ... should we even load rankings or always generate them?
-            # Loaded rankings will always be outdated, unless there was no new audio added
-            # How do we detect a change in present audio files?
-            rankings = rank_io.load_rankings()\
-                .or_else(rank_io.generate_rankings)
+            possible_rankings = rank_io.load_rankings()
+
+            if possible_rankings.is_failure():
+                logger.info("Generating new rankings file")
+                possible_rankings = rank_io.generate_rankings()
             
-            if rankings.is_failure():
-                logger.debug("Couldn't load or generate rankings, skipping shuffle and playback")
+            if possible_rankings.is_failure():
+                logger.warn("Couldn't generate rankings - no audio files present")
                 threading.Event().wait(3)
                 continue
 
+            rankings = possible_rankings.get_value()
+            
+            # save for next run - save a trip to disk
+            # Further, this will fail silently if saving was unsuccessful.
+            # We can just regenerate, and failing the app over this makes no sense
+            rank_io.save_rankings(rankings)
+
             # Okay so we get the top k words
-            top_words = Rank.top_k(rankings.get_value(), current_top_k)
+            top_words = Rank.top_k(rankings, current_top_k)
             app.set_words(top_words)
             
-            # Then we get all waves for the top k words...
+            # Then we get all waves for the top k words... because getting 
+            # waves is expensive
             word_snippets = { 
                 word: disk_io.load_waves_for(word).get_or_else([])
                 for word, _ in top_words
             }
 
+            sequencer = Sequencer(
+                word_snippets[top_words[0][0]][0],
+                word_snippets[top_words[1][0]][0],
+                word_snippets[top_words[2][0]][0],
+                word_snippets[top_words[3][0]][0],
+                word_snippets[top_words[4][0]][0],
+                logger,
+                SAMPLERATE
+            )
+
+            sequence_length = 16
+            step_length = 0.2
+
+            sequence = sequencer.generate_sequence(sequence_length, step_length)
+            mixer = Mixer(SAMPLERATE)
+
+            audio = mixer.mix_down(sequence_length, step_length, sequence)
+            audio_player.play(audio, attack=app.attack, decay=app.decay)
+
+            continue
+
             # Then we get the top k words... again? I guess I wanted to do mapping between
             # words and spoken words, but semantically this makes me sick
-            shuffle = Shuffle(word_snippets, rankings.get_value(), logger)
+            shuffle = Shuffle(word_snippets, rankings, logger)
             top_k = shuffle.get_top_k(current_top_k)
             shuffled = shuffle.shuffle_top_k(top_k, app.shuffle_factor)
 
-            # all g
+            # all g - envelope can be modified while this is playing 
             if app.play_pressed:
                 for audio in shuffled:
                     audio_player.play(audio, attack=app.attack, decay=app.decay)

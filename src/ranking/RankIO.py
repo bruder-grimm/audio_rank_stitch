@@ -1,5 +1,7 @@
 from collections import defaultdict
 import json
+import math
+import os
 from pathlib import Path
 from typing import Dict, Optional
 from util.Result import Result, Success, Failure
@@ -20,6 +22,8 @@ class RankIO():
         self.ranking_file = path / RANKINGS_FILE
         self.logger = logger
         self.buffer: Optional[dict[str, int]] = None
+
+        self.last_modified: float = os.stat(path).st_mtime
 
     def save_rankings(self, rankings: dict[str, int]) -> Result[int, RankIOError]:
         """
@@ -60,12 +64,11 @@ class RankIO():
 
         return Success(dict(result))
 
-
-
     def load_rankings(self) -> Result[dict[str, int], RankIOError]:
         """
         Loads rankings from the rankings.json. Rankings are of {str: int}
         That is {"word": occurance}
+        If the contents of the working directory has changes since the last fetch, this might take some more time
         If the file does not exist this will fail
         """
         try:
@@ -76,6 +79,15 @@ class RankIO():
             return Failure(RankIOError(f"Ranking file not found at {self.ranking_file.absolute}"))
         except Exception as e:
             return Failure(RankIOError(e))
+        
+
+    def _audio_files_have_changed(self) -> bool:
+        potentially_new_last_modified = os.stat(self.working_directory).st_mtime
+        if math.isclose(self.last_modified, potentially_new_last_modified, rel_tol=1e-9):
+            return False
+        
+        self.last_modified = potentially_new_last_modified
+        return True
         
     def _buffered_read(self) -> dict[str, int]:
         if not self.buffer:

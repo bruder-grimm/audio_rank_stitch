@@ -49,7 +49,7 @@ class PlaybackWindow(tk.Tk):
         # silence duration slider (0.1‑5 s)
         self.silence_slider = tk.Scale(
             frame,
-            from_=0.1,
+            from_=0.0,
             to=5.0,
             resolution=0.1,
             orient=tk.HORIZONTAL,

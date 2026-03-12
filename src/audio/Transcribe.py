@@ -41,7 +41,7 @@ class Transcribe:
             language_code=language, device=self.device
         )
 
-    def transcribe(self, audio: NDArray[float32]) -> Result[dict, NoTranscriptionError]:
+    def transcribe(self, audio: NDArray[float32]) -> Result[tuple[str, dict], NoTranscriptionError]:
         """
         Transcribe float32 numpy audio to text with alignment.
         Returns dict with 'text' and 'segments' (including word timestamps).
@@ -73,7 +73,11 @@ class Transcribe:
             return Failure(NoTranscriptionError())
         
         # ...unless 👀
-        self.logger.debug(f"Successfully transcribed:\n {result["segments"]}")
+        try:
+            transcript = result["segments"][0]["text"]
+            self.logger.debug(f"Successfully transcribed:\n {transcript}")
+        except Exception as e:
+            return Failure(NoTranscriptionError())
 
         # 3. We align
         result_aligned = whisperx.align(
@@ -88,7 +92,7 @@ class Transcribe:
         self.logger.debug(f"Successfully aligned: \n {result_aligned['segments']}")
         del resampled_audio
 
-        return Success(result_aligned)  # Return the full dict for access to timestamps
+        return Success((transcript, result_aligned))  # Return the full dict for access to timestamps
 
     def get_words_with_audio(
             self, 
