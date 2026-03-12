@@ -1,11 +1,8 @@
-import math
-import os
 import threading
 
-from pathlib import Path
 
 from audio.DiskIO import DiskIO
-from audio.Play import Player
+from audio.playback_record.Play import Player
 from ranking import Rank
 from ranking.RankIO import RankIO
 from sequencing.Mixer import Mixer
@@ -15,7 +12,6 @@ from ui.PlaybackWindow import PlaybackWindow
 from util.Logger import Logger
 
 from config import LOGLEVEL, SAMPLERATE, PATH
-from util.Result import Result
 
 
 if __name__ == "__main__":
@@ -74,13 +70,13 @@ if __name__ == "__main__":
             }
 
             sequencer = Sequencer(
-                word_snippets[top_words[0][0]][0],
-                word_snippets[top_words[1][0]][0],
-                word_snippets[top_words[2][0]][0],
-                word_snippets[top_words[3][0]][0],
-                word_snippets[top_words[4][0]][0],
                 logger,
-                SAMPLERATE
+                SAMPLERATE,
+                kick_drum   = word_snippets[top_words[0][0]][0],
+                snare_drum  = word_snippets[top_words[1][0]][0],
+                high_hat    = word_snippets[top_words[2][0]][0],
+                toms        = word_snippets[top_words[3][0]][0],
+                cymbal      = word_snippets[top_words[4][0]][0],
             )
 
             sequence_length = 16

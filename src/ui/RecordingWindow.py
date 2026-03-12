@@ -1,6 +1,6 @@
 import tkinter as tk
 import time
-from audio.Record import Recorder
+from audio.playback_record.Record import Recorder
 from util.Logger import Logger
 
 class RecordingWindow(tk.Tk):

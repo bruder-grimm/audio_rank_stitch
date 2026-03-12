@@ -3,7 +3,7 @@ import json
 import math
 import os
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 from util.Result import Result, Success, Failure
 from util.Logger import Logger
 

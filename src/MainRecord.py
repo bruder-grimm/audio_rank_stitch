@@ -2,8 +2,8 @@ import threading
 from time import time
 
 from audio.DiskIO import DiskIO
-from audio.Record import Recorder
-from audio.RecordingQueue import RecordingQueue
+from audio.playback_record.Record import Recorder
+from audio.playback_record.RecordingQueue import RecordingQueue
 from audio.Transcribe import Transcribe
 from ui.RecordingWindow import RecordingWindow
 from util.Logger import Logger

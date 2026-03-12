@@ -21,7 +21,7 @@ class Transcribe:
             self, 
             batch_size: int, 
             logger: Logger,
-            samplerate: int = 44100,
+            samplerate: int,
             device: str = "cpu", 
             language: str = "en"
         ):

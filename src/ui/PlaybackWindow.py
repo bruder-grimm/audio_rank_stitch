@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Optional, Any
 
-from audio.Play import Player
+from audio.playback_record.Play import Player
 from util.Logger import Logger
 
 class PlaybackWindow(tk.Tk):

@@ -20,7 +20,7 @@ class SamplingRateMismatch(Exception):
 
 
 class DiskIO():
-    def __init__(self, path: Path, logger: Logger, sampling_rate: int = 44100) -> None:
+    def __init__(self, path: Path, logger: Logger, sampling_rate: int) -> None:
         self.path = path
         self.sampling_rate = sampling_rate
         self.logger = logger
