@@ -1,9 +1,10 @@
 from collections import defaultdict
 import json
 from pathlib import Path
-from typing import Dict, Optional
-from util.Result import Result, Success, Failure
-from util.Logger import Logger
+from typing import Optional
+from util.result import Result, Success, Failure
+from util.logger import Logger
+from app_state import AppState
 
 RANKINGS_FILE = "rankings.json"
 
@@ -15,11 +16,17 @@ class NoAudioFilesError(Exception):
 
 
 class RankIO():
-    def __init__(self, path: Path, logger: Logger) -> None:
+    def __init__(
+        self,
+        path: Path,
+        logger: Logger,
+        app_state: Optional[AppState] = None,
+    ) -> None:
         self.working_directory = path
         self.ranking_file = path / RANKINGS_FILE
         self.logger = logger
         self.buffer: Optional[dict[str, int]] = None
+        self.app_state = app_state
 
     def save_rankings(self, rankings: dict[str, int]) -> Result[int, RankIOError]:
         """
@@ -39,6 +46,7 @@ class RankIO():
     def generate_rankings(self) -> Result[dict[str, int], NoAudioFilesError]:
         """
         Generates a rankings dictionary based on present word snippets.
+        Updates AppState if available.
         """
         result = defaultdict(int)
         self.logger.debug(f"Generating rankings from {self.working_directory}")
@@ -58,19 +66,23 @@ class RankIO():
         if len(result) == 0:
             return Failure(NoAudioFilesError())
 
-        return Success(dict(result))
+        result_dict = dict(result)
+        
+        return Success(result_dict)
 
 
 
     def load_rankings(self) -> Result[dict[str, int], RankIOError]:
         """
-        Loads rankings from the rankings.json. Rankings are of {str: int}
-        That is {"word": occurance}
+        Loads rankings from the rankings.json or AppState if available.
+        Rankings are of {str: int}, that is {"word": occurance}
         If the file does not exist this will fail
         """
         try:
             self.logger.debug(f"Loading rankings from {self.ranking_file.absolute}")
-            return Success(self._buffered_read())
+            rankings = self._buffered_read()
+            
+            return Success(rankings)
         
         except FileNotFoundError:
             return Failure(RankIOError(f"Ranking file not found at {self.ranking_file.absolute}"))

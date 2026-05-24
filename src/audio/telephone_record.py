@@ -5,8 +5,8 @@ import numpy as np
 
 from typing import Optional
 
-from audio.RecordingQueue import RecordingQueue
-from util.Logger import Logger
+from audio.recording_queue import RecordingQueue
+from util.logger import Logger
 import sounddevice as sd
 import numpy as np
 
@@ -72,12 +72,27 @@ class Recorder:
             return
         
         full_audio = np.concatenate(self.frames, axis=0)
+        normalized_audio = self._normalize_audio(full_audio)
 
-        # Add some normalization to prevent clipping and ensure consistent volume levels
-        target_rms = 0.1  # tune this, 0.1 is a good starting point for speech
-        current_rms = np.sqrt(np.mean(full_audio ** 2))
-        full_audio = full_audio * (target_rms / (current_rms + 1e-9))
-        full_audio = np.clip(full_audio, -1.0, 1.0)  # prevent clipping
-
-        self.recording_queue.append(full_audio)
+        self.recording_queue.append(normalized_audio)
         self.frames = []
+
+    def _normalize_audio(self, audio: np.ndarray, target_rms: float = 0.1) -> np.ndarray:
+        """Peak-safe RMS normalization.
+
+        Scale the waveform so that its RMS is near `target_rms`, but never
+        scale so high that the signal clips.
+        """
+        audio = np.asarray(audio, dtype=np.float32)
+        current_rms = np.sqrt(np.mean(audio ** 2))
+        peak = np.max(np.abs(audio))
+
+        if current_rms < 1e-9 or peak < 1e-9:
+            return audio
+
+        gain = target_rms / current_rms
+        peak_safe_gain = 1.0 / peak
+        gain = min(gain, peak_safe_gain)
+
+        normalized = audio * gain
+        return np.clip(normalized, -1.0, 1.0)

@@ -1,17 +1,15 @@
 import threading
 
-from pathlib import Path
+from audio.audio_disk_io import DiskIO
+from audio.mixer.audio_mixer import Mixer
+from audio.speaker_playback import SpeakerPlayer
+from ranking import word_ranking
+from ranking.word_ranking_io import RankIO
+from shuffling.shuffling import Shuffle
+from ui.speaker_playback_server import PlaybackSettingsFrontend
+from util.logger import Logger
 
-from audio.DiskIO import DiskIO
-from audio.Play import Player
-from ranking import Rank
-from ranking.RankIO import RankIO
-from shuffling.Shuffle import Shuffle
-from ui.PlaybackWindow import PlaybackWindow
-from util.Logger import Logger
-
-from config import LOGLEVEL, SAMPLERATE, PATH
-from util.Result import Result
+from config import LOGLEVEL, SAMPLERATE, PATH, PLAYBACK_BLOCKSIZE
 
 
 if __name__ == "__main__":
@@ -27,10 +25,17 @@ if __name__ == "__main__":
     rank_io = RankIO(PATH, logger)
     disk_io = DiskIO(PATH, logger, SAMPLERATE)
 
-    audio_player = Player(SAMPLERATE)
+    mixer = Mixer()
+
+    audio_player = SpeakerPlayer(mixer, SAMPLERATE)
 
     # Here we go (again)
-    app = PlaybackWindow(audio_player, logger)
+    app = PlaybackSettingsFrontend()
+    
+    # Start Flask server in background thread
+    flask_thread = threading.Thread(target=app.run, kwargs={"debug": False}, daemon=True)
+    flask_thread.start()
+    logger.info("PlaybackSettingsFrontend started on http://localhost:5000")
 
     def worker():
         while True:
@@ -51,7 +56,7 @@ if __name__ == "__main__":
                 continue
 
             # Okay so we get the top k words
-            top_words = Rank.top_k(rankings.get_value(), current_top_k)
+            top_words = word_ranking.top_k(rankings.get_value(), current_top_k)
             app.set_words(top_words)
             
             # Then we get all waves for the top k words...
@@ -77,4 +82,3 @@ if __name__ == "__main__":
             
 
     threading.Thread(target=worker, daemon=True).start()
-    app.mainloop()

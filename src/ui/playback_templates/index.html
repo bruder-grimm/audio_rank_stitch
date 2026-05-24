@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Playback Settings</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Audio Playback Settings</h1>
+        
+        <section class="controls">
+            <div class="slider-group">
+                <label for="attack">Attack (%)</label>
+                <input type="range" id="attack" min="0" max="100" value="50">
+                <span id="attack-value">50</span>%
+            </div>
+            
+            <div class="slider-group">
+                <label for="decay">Decay (%)</label>
+                <input type="range" id="decay" min="0" max="100" value="50">
+                <span id="decay-value">50</span>%
+            </div>
+            
+            <div class="slider-group">
+                <label for="silence">Silence (s)</label>
+                <input type="range" id="silence" min="0.1" max="5" step="0.1" value="1.0">
+                <span id="silence-value">1.0</span>s
+            </div>
+            
+            <div class="slider-group">
+                <label for="shuffle">Shuffle / Spice (%)</label>
+                <input type="range" id="shuffle" min="0" max="100" value="50">
+                <span id="shuffle-value">50</span>%
+            </div>
+            
+            <div class="slider-group">
+                <label for="topk">Pre top k cutoff</label>
+                <input type="range" id="top_k_a" min="1" max="100" value="10">
+                <span id="topk-value">5</span>
+            </div>
+            
+            <div class="slider-group">
+                <label for="topk">Post top k cutoff</label>
+                <input type="range" id="top_k_b" min="1" max="300" value="50">
+                <span id="topk-value">5</span>
+            </div>
+
+            <button id="play-btn" class="play-button">Play</button>
+        </section>
+        
+        <section class="words-section">
+            <h2>Top Words</h2>
+            <ul id="words-list" class="words-list">
+                <li class="placeholder">No words loaded yet...</li>
+            </ul>
+        </section>
+    </div>
+    
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

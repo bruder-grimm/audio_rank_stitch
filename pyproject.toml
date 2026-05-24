@@ -27,6 +27,12 @@ dev = [
     "black>=24.0",
     "ruff>=0.2.0",
 ]
+ui = [
+    "flask>=3.0.0",
+]
+
+[project.scripts]
+audio-rank-stitch = "src.main:main"
 
 [tool.black]
 line-length = 100

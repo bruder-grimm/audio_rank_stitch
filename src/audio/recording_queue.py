@@ -3,7 +3,7 @@ from typing import Optional
 from numpy import float32
 from numpy.typing import NDArray
 
-from util.Logger import Logger
+from util.logger import Logger
 
 
 class RecordingQueue():
