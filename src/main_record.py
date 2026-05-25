@@ -1,7 +1,7 @@
 import threading
 from time import time
 
-from audio.audio_disk_io import DiskIO
+from audio.loading.audio_disk_io import DiskIO
 from audio.mixer.audio_mixer import Mixer
 from audio.telephone_playback import TelephonePlayer
 from audio.telephone_record import Recorder

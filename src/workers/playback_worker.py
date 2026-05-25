@@ -1,7 +1,7 @@
 """Playback worker thread for playing ranked audio."""
 
 import threading
-from audio.audio_disk_io import DiskIO
+from audio.loading.audio_disk_io import DiskIO
 from audio.speaker_playback import SpeakerPlayer
 from ranking import word_ranking
 from ranking.word_ranking_io import RankIO

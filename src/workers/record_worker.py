@@ -2,7 +2,7 @@
 
 import threading
 from typing import Optional
-from audio.audio_disk_io import DiskIO
+from audio.loading.audio_disk_io import DiskIO
 from audio.telephone_record import Recorder
 from audio.recording_queue import RecordingQueue
 from audio.audio_transcription import Transcribe

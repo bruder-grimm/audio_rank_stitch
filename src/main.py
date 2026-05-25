@@ -10,18 +10,18 @@ import socket
 import sys
 import threading
 
-from audio.audio_disk_io import DiskIO
+from audio.loading.audio_disk_io import DiskIO
 from audio.mixer.audio_mixer import Mixer
 from audio.telephone_playback import TelephonePlayer
 from audio.telephone_record import Recorder
 from audio.recording_queue import RecordingQueue
 from audio.audio_transcription import Transcribe
 from audio.speaker_playback import SpeakerPlayer
-from ranking.word_ranking_io import RankIO
+from ranking.word_rankings import Rankings
 from shuffling.shuffling import Shuffle
 from ui.telephone_recording_server import RecordingFrontend
 from ui.speaker_playback_server import PlaybackSettingsFrontend
-from util.logger import Logger
+from util.Logger import Logger
 from workers.record_worker import run_record_worker
 from workers.playback_worker import run_playback_worker
 from app_state import AppState
@@ -48,7 +48,7 @@ def main():
     
     # Initialize I/O layers with AppState
     disk_io = DiskIO(PATH, logger, SAMPLERATE, app_state=app_state)
-    rank_io = RankIO(PATH, logger, app_state=app_state)
+    
     logger.info("DiskIO and RankIO initialized with AppState")
     
     # Eagerly load rankings from disk on startup because that's when we have time
@@ -60,6 +60,9 @@ def main():
     
     # Load playback settings from disk (eager load). THIS DOESN't EXIST YET!!
     settings_file = PATH / "settings.json"
+    rankings_file = PATH / "rankings.json"
+
+    rankings = Rankings.load(rankings_file)
     app_state.load_settings(settings_file)
     logger.info("Playback settings loaded")
     
@@ -152,7 +155,7 @@ def main():
         
         # Persist rankings to disk
         logger.info("Persisting rankings to disk...")
-        app_state.persist_rankings(rank_io)
+        rank
         logger.info("Rankings persisted")
         
         # Persist playback settings to disk

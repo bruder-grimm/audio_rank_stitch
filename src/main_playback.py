@@ -1,6 +1,6 @@
 import threading
 
-from audio.audio_disk_io import DiskIO
+from audio.loading.audio_disk_io import DiskIO
 from audio.mixer.audio_mixer import Mixer
 from audio.speaker_playback import SpeakerPlayer
 from ranking import word_ranking
