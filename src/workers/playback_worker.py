@@ -1,21 +1,19 @@
 """Playback worker thread for playing ranked audio."""
 
 import threading
+
 from audio.loading.audio_disk_io import DiskIO
 from audio.speaker_playback import SpeakerPlayer
-from ranking import word_ranking
-from ranking.word_ranking_io import RankIO
-from shuffling.shuffling import Shuffle
+from ranking.shuffling import Shuffle
+from ui.speaker_playback_server import PlaybackSettingsFrontend
 from util.logger import Logger
 from app_state import AppState
 
 
 def run_playback_worker(
     app_state: AppState,
-    rank_io: RankIO,
     disk_io: DiskIO,
     audio_player: SpeakerPlayer,
-    flask_frontend,
     logger: Logger,
 ) -> None:
     """
@@ -25,45 +23,45 @@ def run_playback_worker(
     Loads rankings from AppState, shuffles top-k words, and plays audio.
     """
     while not app_state.shutdown_requested.is_set():
-        # Get current UI settings
-        current_top_k = flask_frontend.top_k
-
-        # Load rankings from AppState (which is kept in sync with disk)
-        rankings = rank_io.load_rankings().or_else(rank_io.generate_rankings)
-        
-        if rankings.is_failure():
-            logger.debug("Couldn't load or generate rankings, skipping shuffle and playback")
-            threading.Event().wait(1)
+        if not app_state.should_play.is_set():
+            threading.Event().wait(0.1)
             continue
-
-        # Get top k words
-        top_words = word_ranking.top_k(rankings.get_value(), current_top_k)
-        flask_frontend.set_words(top_words)
         
-        # Load audio snippets for top k words (with AppState caching)
+        # Get top k words with our current top-k settings from AppState
+        top_words = app_state._rankings.get_words_for_topk_range(app_state.top_k_a, app_state.top_k_b)
+        app_state.set_current_top_k_word_selection(top_words)
+        
+        # Load audio snippets for top k words (with caching - do NOT worry ok thanks)
         word_snippets = {
             word: disk_io.load_waves_for(word).get_or_else([])
             for word, _ in top_words
         }
 
         # Shuffle and prepare for playback
-        shuffle = Shuffle(word_snippets, rankings.get_value(), logger)
-        top_k = shuffle.get_top_k(current_top_k)
-        shuffled = shuffle.shuffle_top_k(top_k, flask_frontend.shuffle_factor)
+        shuffler = Shuffle(logger)
+        shuffled = shuffler.shuffle_top_k(word_snippets, top_words, app_state.shuffle_factor)
 
-        # Play if button pressed
-        if flask_frontend.play_pressed:
-            for audio in shuffled:
-                if app_state.pause_pressed.isSet():
-                    break
-                audio_player.play(
-                    audio,
-                    attack=app_state.attack,
-                    decay=app_state.decay,
-                )
-                threading.Event().wait(app_state.silence_duration)
-        else:
-            logger.debug("No audio in playback queue")
-            threading.Event().wait(0.5)
+        for audio in shuffled:
+            # Stop current playback if should_play is unset during playback
+            if not app_state.should_play.is_set():
+                audio_player.stop()
+                break
+
+            # Don't stop the playback but stop queuing if the data has been touched
+            if app_state.playback_dirty.is_set():
+                break
+
+            # Block during playback of a single snippet because we don't want to fill our
+            # queue with a bunch of audio that is now stale because audio has changed
+            audio_player.play_blocking(
+                audio,
+                attack=app_state.attack,
+                decay=app_state.decay,
+            )
+            # Having this queued is critical: We can actually get a new ranking while we're
+            # still playing the current audio in this sort of blanking period, so we can
+            # have what is hopefully uninterrupted plaback while we update our snippets
+            # with the new audio that has been created by the recording thread!
+            audio_player.queue_silence(app_state.silence_duration)
     
     logger.info("Playback worker shutting down...")

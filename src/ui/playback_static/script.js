@@ -4,7 +4,10 @@ const sliders = {
     decay: document.getElementById('decay'),
     silence: document.getElementById('silence'),
     shuffle: document.getElementById('shuffle'),
-    topk: document.getElementById('topk'),
+    topk_a: document.getElementById('top_k_a'),
+    topk_b: document.getElementById('top_k_b'),
+    pre_trim: document.getElementById('pre_trim'),
+    post_trim: document.getElementById('post_trim'),
 };
 
 const valueDisplays = {
@@ -12,7 +15,10 @@ const valueDisplays = {
     decay: document.getElementById('decay-value'),
     silence: document.getElementById('silence-value'),
     shuffle: document.getElementById('shuffle-value'),
-    topk: document.getElementById('topk-value'),
+    topk_a: document.getElementById('top_k_a-value'),
+    topk_b: document.getElementById('top_k_b-value'),
+    pre_trim: document.getElementById('pre_trim-value'),
+    post_trim: document.getElementById('post_trim-value'),
 };
 
 // Update displays and send to server
@@ -40,8 +46,19 @@ Object.entries(sliders).forEach(([key, slider]) => {
             case 'shuffle':
                 payload.shuffle_factor = parseInt(value);
                 break;
-            case 'topk':
-                payload.top_k = parseInt(value);
+            case 'top_k_a':
+                payload.top_k_a = parseInt(value);
+                break;
+            case 'top_k_b':
+                payload.top_k_b = parseInt(value);
+                break;
+            case 'pre_trim':
+                payload.pre_trim = parseFloat(value);
+                break;
+            case 'post_trim':
+                payload.post_trim = parseFloat(value);
+                break;
+            default:
                 break;
         }
         
@@ -53,9 +70,20 @@ Object.entries(sliders).forEach(([key, slider]) => {
     });
 });
 
-// Play button
-document.getElementById('play-btn').addEventListener('click', () => {
+// Play/pause button logic
+const playButton = document.getElementById('play-btn');
+
+let isPlaying = false;
+
+playButton.addEventListener('click', () => {
     fetch('/api/play', { method: 'POST' })
+        .then(() => {
+            isPlaying = !isPlaying;
+
+            playButton.textContent = isPlaying
+                ? '⏸ Pause'
+                : '▶ Play';
+        })
         .catch(err => console.error('Error triggering play:', err));
 });
 
@@ -70,7 +98,7 @@ function updateWords() {
                     .map(w => `<li>${w.word}: ${w.count}</li>`)
                     .join('');
             } else {
-                wordsList.innerHTML = '<li class="placeholder">No words loaded yet...</li>';
+                wordsList.innerHTML = '<li class="placeholder">0x00: NO WORDS</li>';
             }
         })
         .catch(err => console.error('Error fetching words:', err));
@@ -96,7 +124,10 @@ function pollSettingsFromServer() {
                 'decay': 'decay',
                 'silence_duration': 'silence',
                 'shuffle_factor': 'shuffle',
-                'top_k': 'topk',
+                'top_k_a': 'top_k_a',
+                'top_k_b': 'top_k_b',
+                'pre_trim': 'pre_trim',
+                'post_trim': 'post_trim',
             };
             
             Object.entries(keyMapping).forEach(([apiKey, uiKey]) => {

@@ -1,7 +1,6 @@
 from app_state import AppState
 from audio.telephone_record import Recorder
 from flask import Flask, render_template, jsonify, request
-from typing import Optional
 
 
 class RecordingFrontend:
@@ -32,7 +31,11 @@ class RecordingFrontend:
         self.app.route("/api/status", methods=["GET"])(self._get_status)
         self.app.route("/api/colors", methods=["GET"])(self._get_colors)
         self.app.route("/api/spacebar", methods=["POST"])(self._handle_spacebar)
-    
+
+    def set_background_color(self, color: str):
+        """Set the background color for the frontend."""
+        self._background_color = color
+
     def _index(self):
         """Serve main HTML page."""
         return render_template("index.html")
@@ -40,16 +43,14 @@ class RecordingFrontend:
     def _get_status(self):
         """Get current instruction text."""
         return jsonify({
-            "instruction": self._app_state.instruction,
-            "background_color": self._app_state.background_color,
-            "text_color": self._app_state.text_color,
+            "instruction": self._app_state.get_current_instruction(),
+            "background_color": self._background_color,
         })
     
     def _get_colors(self):
         """Get current colors."""
         return jsonify({
             "background_color": self._background_color,
-            "text_color": self._text_color,
         })
     
     def _handle_spacebar(self):
@@ -64,15 +65,9 @@ class RecordingFrontend:
         event_type = data.get("type")  # "down" or "up"
         
         if event_type == "down":
-            if not self._is_recording:
-                self._app_state.is_recording = True
-                self.recorder.start()
-                self._background_color = "#ce0000"  # Turn red
+            self._app_state.phone_picked_up.set()
         elif event_type == "up":
-            if self._is_recording:
-                self.recorder.stop()
-                self._app_state.is_recording = False
-                self._background_color = "#ffffff"  # Turn white
+            self._app_state.phone_picked_up.clear()
         
         return jsonify({"status": "ok"})
     

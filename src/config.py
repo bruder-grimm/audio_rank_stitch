@@ -16,13 +16,16 @@ SPEAKER_CHANNEL = CHANNEL.RIGHT
 
 # Config for our Recordings
 SAMPLERATE = 44100
-PATH = Path(__file__).resolve().parent / "../word_snippets"
+AUDIO_SNIPPET_PATH = Path(__file__).resolve().parent / "../word_snippets"
 
 # WhisperX config (don't touch that sample rate)
 # Buffer sizes are in millis
 WHISPERX_SAMPLERATE = 16000
 AUDIO_SNIPPET_PRE_BUFFER = 0.2
 AUDIO_SNIPPET_POST_BUFFER = 0.2
+
+PRE_DIAL_DELAY_SECONDS = 1.0
+POST_RECORDING_PROCESSING_DELAY_SECONDS = 10
 
 PLAYBACK_BLOCKSIZE = 1024
 

@@ -63,12 +63,16 @@ class PlaybackSettingsFrontend:
     
     def _play(self):
         """Handle play button press."""
-        self._app_state.play_pressed = True
+        if not self._app_state.should_play.is_set():
+            self._app_state.should_play.set()
+        else:
+            self._app_state.should_play.clear()
+
         return jsonify({"status": "ok"})
     
     def _get_words(self):
         """Get list of words to display."""
-        return jsonify({"words": self._app_state.sorted_words})
+        return jsonify({"words": self._app_state.get_current_top_k_selection()})
     
     def run(self, debug: bool = False):
         """Start the Flask server in a thread."""
@@ -96,16 +100,19 @@ class PlaybackSettingsFrontend:
         return self._app_state.silence_duration
     
     @property
-    def top_k(self) -> int:
+    def top_k_a(self) -> int:
         """Number of top words to consider."""
         return self._app_state.top_k_a
+
+    @property
+    def top_k_b(self) -> int:
+        """Number of top words to consider."""
+        return self._app_state.top_k_b
     
     @property
     def play_pressed(self) -> bool:
-        """Returns True if the play button was pressed since last check."""
-        return self._app_state.play_pressed
-    
-    @play_pressed.setter
-    def play_pressed(self, value: bool):
-        """Reset the play pressed flag."""
-        self._app_state.play_pressed = value
+        if self._app_state.should_play.is_set():
+            self._app_state.should_play.clear()
+            return True
+        return False
+

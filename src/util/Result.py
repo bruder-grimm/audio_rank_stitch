@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Callable, Generic, TypeVar, cast
+from typing import Callable, Generic, Optional, TypeVar, cast
 
 T = TypeVar("T")  # success type
 E = TypeVar("E", bound=Exception)  # error type
@@ -53,6 +53,34 @@ class Result(Generic[T, E]):
             return cast("Result[T, X]", self)
         else:
             return default()
+        
+    def to_optional(self) -> Optional[T]:
+        if self.is_success():
+            return self.get_value()
+        else:
+            return None
+        
+    def fold[X](self, on_success: Callable[[T], X], on_failure: Callable[[E], X]) -> X:
+        if self.is_success():
+            return on_success(self.get_value())
+        else:
+            return on_failure(self.get_error())
+        
+    def foreach(self, on_success: Callable[[T], None], on_failure: Callable[[E], None]) -> None:
+        if self.is_success():
+            on_success(self.get_value())
+        else:
+            on_failure(self.get_error())
+
+    def on_failure(self, func: Callable[[E], None]) -> "Result[T, E]":
+        if self.is_failure():
+            func(self.get_error())
+        return self
+    
+    def on_success(self, func: Callable[[T], None]) -> "Result[T, E]":
+        if self.is_success():
+            func(self.get_value())
+        return self
         
 
 @dataclass

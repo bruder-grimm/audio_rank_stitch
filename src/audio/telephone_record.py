@@ -1,14 +1,15 @@
 from typing import Optional
 
+from numpy.typing import NDArray
 import sounddevice as sd
 import numpy as np
 
 from typing import Optional
 
-from audio.recording_queue import RecordingQueue
 from util.logger import Logger
 import sounddevice as sd
 import numpy as np
+from util.result import Failure, Result, Success
 
 class RecordingError(Exception):
     pass
@@ -20,14 +21,12 @@ class StreamClosedError(RecordingError):
 class Recorder:
     def __init__(
             self,
-            recording_queue: RecordingQueue,
             logger: Logger,
             samplerate: int = 44100, 
             channels: int = 1, 
         ):
         self.samplerate = samplerate
         self.channels = channels
-        self.recording_queue = recording_queue
         self.frames: list = []
         self.stream: Optional[sd.InputStream] = None
         self.logger = logger
@@ -35,7 +34,7 @@ class Recorder:
     def _callback(self, indata, frames, time, status):
         self.frames.append(indata.copy())
 
-    def start(self):
+    def start_recording(self):
         """
         Starts the recording. There's probably some theoretical limit to how long this
         can run, and the app will most likely just crash if it's going for to long.
@@ -51,17 +50,17 @@ class Recorder:
         )
         self.stream.start()
 
-    def stop(self):
+    def stop_and_get_recording(self) -> Result[NDArray[np.float32], Exception]:
         """
         Will stop the recording, return the successfully accumulated audio data
         Or an error in case anything went wrong
         """
         if self.stream is None:
             self.logger.error("Stream was not open")
-            return
+            return Failure(StreamClosedError("Stream was not open"))
         if self.frames is None:
             self.logger.error("No data has been recorded")
-            return
+            return Failure(RecordingError("No data has been recorded"))
         
         try:
             self.stream.stop()
@@ -69,13 +68,14 @@ class Recorder:
             self.stream = None
         except Exception as e:
             self.logger.error(f"Failed to stop stream: {e}")
-            return
+            return Failure(RecordingError(f"Failed to stop stream: {e}"))
         
         full_audio = np.concatenate(self.frames, axis=0)
-        normalized_audio = self._normalize_audio(full_audio)
+        self.frames = []  # Clear frames for next recording
 
-        self.recording_queue.append(normalized_audio)
-        self.frames = []
+        return Success(self._normalize_audio(full_audio))
+
+
 
     def _normalize_audio(self, audio: np.ndarray, target_rms: float = 0.1) -> np.ndarray:
         """Peak-safe RMS normalization.

@@ -1,23 +1,18 @@
 from __future__ import annotations
 
-import re
 import time
 from collections import defaultdict
-from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import DefaultDict, Optional, TYPE_CHECKING
+from typing import DefaultDict
 
+from audio.loading.filename import get_key_from_word
 import numpy as np
 from numpy.typing import NDArray
 from scipy.io import wavfile
 
 from util.logger import Logger
 from util.result import Failure, Result, Success
-
-if TYPE_CHECKING:
-    from app_state import AppState
-
 
 class NoRecordingsError(Exception):
     pass
@@ -45,33 +40,27 @@ class DiskIO:
         path: Path,
         logger: Logger,
         sampling_rate: int = 44100,
-        app_state: Optional[AppState] = None,
     ) -> None:
         self.path = path
         self.sampling_rate = sampling_rate
         self.logger = logger
         self.buffer: DefaultDict[str, list[Recording]] = defaultdict(list)
-        self._executor = ThreadPoolExecutor(max_workers=4)
-        self.app_state = app_state
 
-    def build_buffer(self) -> dict[str, int]:
+    def build_buffer_from_disk(self) -> None:
         """Populate the in-memory cache for all saved word recordings."""
-        result: dict[str, int] = {}
-
         for word_dir in self.path.iterdir():
             if not word_dir.is_dir():
                 continue
 
-            word_key = self._sanitize_word(word_dir.name)
+            word_key = get_key_from_word(word_dir.name)
             self._buffered_read_word(word_key)
-            result[word_key] = len(self.buffer[word_key])
 
-        return result
+        self.logger.debug(f"DiskIO buffer built with recordings for {len(self.buffer)} words")
 
     def load_waves_for(self, word: str) -> Result[list[NDArray[np.float32]], Exception]:
         """Load recordings for a single word, newest first."""
         try:
-            word_key = self._sanitize_word(word)
+            word_key = get_key_from_word(word)
 
             if word_key not in self.buffer:
                 self.logger.warn(f"Cache miss for word: {word_key}")
@@ -105,7 +94,7 @@ class DiskIO:
     def save_waves_for(self, word: str, waves: list[NDArray[np.float32]]) -> Result[int, Exception]:
         """Save a list of waveforms for a single word."""
         try:
-            word_key = self._sanitize_word(word)
+            word_key = get_key_from_word(word)
             word_dir = self.path / word_key
             word_dir.mkdir(parents=True, exist_ok=True)
 
@@ -124,13 +113,13 @@ class DiskIO:
             self.logger.error(f"Encountered error while saving waves: {exc}")
             return Failure(exc)
 
-    def save_wave_async(self, audio: NDArray[np.float32]) -> Result[int, Exception]:
+    def save_wave(self, audio: NDArray[np.float32]) -> Result[int, Exception]:
         """Save a single waveform to disk in a background thread without blocking."""
         try:
             self.path.mkdir(parents=True, exist_ok=True)
             file_path = self.path / f"raw_{time.time_ns()}.wav"
             self.logger.debug(f"Scheduling async save for {file_path}")
-            self._queue_async_write(file_path, np.asarray(audio, dtype=np.float32).copy())
+            wavfile.write(file_path, self.sampling_rate, audio)
             return Success(1)
         except Exception as exc:
             self.logger.error(f"Encountered error while scheduling async save: {exc}")
@@ -150,9 +139,6 @@ class DiskIO:
         except Exception as exc:
             self.logger.error(f"Encountered error while saving multiple words: {exc}")
             return Failure(exc)
-
-    def _sanitize_word(self, word: str) -> str:
-        return re.sub(r'[<>:\".,\'/\\|?*\x00-\x1f]', '', word).strip().lower()
 
     def _buffered_read_word(self, word: str) -> None:
         self.buffer[word] = []
@@ -191,24 +177,4 @@ class DiskIO:
                 path=path,
             )
         )
-        self._queue_async_write(path, audio_copy)
-
-    def _queue_async_write(self, path: Path, audio: NDArray[np.float32]) -> None:
-        future = self._executor.submit(self._async_write_file, path, audio)
-        future.add_done_callback(lambda fut, p=path: self._handle_async_write_result(fut, p))
-
-    def _async_write_file(self, path: Path, audio: NDArray[np.float32]) -> None:
-        wavfile.write(path, self.sampling_rate, audio)
-        self.logger.debug(f"Async save completed for {path}")
-
-    def _handle_async_write_result(self, future: Future, path: Path) -> None:
-        exc = future.exception()
-        if exc is not None:
-            self.logger.error(f"Async save failed for {path}: {exc}")
-
-    def flush_buffer(self) -> None:
-        """Wait for all pending async writes to complete before shutdown."""
-        self.logger.info("Flushing DiskIO buffer...")
-        self._executor.shutdown(wait=True)
-        self.logger.info("DiskIO buffer flushed")
-
+        wavfile.write(path, self.sampling_rate, audio_copy)

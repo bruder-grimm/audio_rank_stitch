@@ -1,5 +1,5 @@
 import threading
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -28,7 +28,6 @@ class Mixer:
 
     - Left channel is channel 0, right channel is channel 1.
     - `play_left` and `play_right` accept 1-D numpy arrays of dtype float32.
-    - Multiple buffers queued on the same channel will be mixed (overlapped).
     """
 
     def __init__(self, sample_rate: int = SAMPLERATE, blocksize: int = PLAYBACK_BLOCKSIZE):
@@ -85,22 +84,61 @@ class Mixer:
         # Write mixed output to outdata
         outdata[:] = out
 
-    def _queue_audio(self, channel: CHANNEL, audio: NDArray[np.float32]) -> None:
+    def _queue_audio(
+            self, 
+            channel: CHANNEL, 
+            audio: NDArray[np.float32], 
+            playback_finished: Optional[threading.Event] = None
+        ) -> None:
         if audio.ndim != 1:
             audio = audio.ravel()
         arr = np.asarray(audio, dtype=np.float32).copy()
+        wait_time = len(arr) / self.sample_rate + 0.1
+
         if arr.size == 0:
             return
         with self._lock:
             self._buffers[channel.value].append({"audio": arr, "pos": 0})
 
-    def queue_phone(self, audio: NDArray[np.float32]) -> None:
-        self._queue_audio(PHONE_CHANNEL, audio)
+        if playback_finished is not None:
+            threading.Timer(wait_time, playback_finished.set).start()
 
-    def queue_speaker(self, audio: NDArray[np.float32]) -> None:
-        self._queue_audio(SPEAKER_CHANNEL, audio)
+    def queue_phone(
+            self, 
+            audio: NDArray[np.float32], 
+            playback_finished: Optional[threading.Event] = None
+        ) -> None:
+        self._queue_audio(PHONE_CHANNEL, audio, playback_finished)
 
-    def stop(self) -> None:
+    def queue_speaker(
+            self, 
+            audio: NDArray[np.float32], 
+            playback_finished: Optional[threading.Event] = None
+        ) -> None:
+        self._queue_audio(SPEAKER_CHANNEL, audio, playback_finished)
+
+    def play_phone_blocking(self, audio: NDArray[np.float32]) -> None:
+        # get wait time from audio length and sample rate, add small buffer time
+        synchronization_event = threading.Event()
+        self.queue_phone(audio, synchronization_event)
+        synchronization_event.wait()
+
+    def play_speaker_blocking(self, audio: NDArray[np.float32]) -> None:
+        synchronization_event = threading.Event()
+        self.queue_speaker(audio, synchronization_event)
+        synchronization_event.wait()
+
+    def stop_phone(self) -> None:
+        """Stop phone playback immediately and clear phone buffers."""
+        with self._lock:
+            self._buffers[self.telephone_channel.value] = []
+
+    def stop_speaker(self) -> None:
+        """Stop speaker playback immediately and clear speaker buffers."""
+        with self._lock:
+            self._buffers[self.speaker_channel.value] = []
+
+    def stop_all(self) -> None:
         """Stop playback and clear queued buffers."""
         with self._lock:
             self._buffers = [[], []]

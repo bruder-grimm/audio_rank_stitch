@@ -14,19 +14,17 @@ from audio.loading.audio_disk_io import DiskIO
 from audio.mixer.audio_mixer import Mixer
 from audio.telephone_playback import TelephonePlayer
 from audio.telephone_record import Recorder
-from audio.recording_queue import RecordingQueue
 from audio.audio_transcription import Transcribe
 from audio.speaker_playback import SpeakerPlayer
-from ranking.word_rankings import Rankings
-from shuffling.shuffling import Shuffle
+from ranking.rankings import Rankings
 from ui.telephone_recording_server import RecordingFrontend
 from ui.speaker_playback_server import PlaybackSettingsFrontend
-from util.Logger import Logger
+from util.logger import Logger
 from workers.record_worker import run_record_worker
 from workers.playback_worker import run_playback_worker
 from app_state import AppState
 
-from config import LOGLEVEL, SAMPLERATE, PATH, INSTRUCTIONS
+from config import LOGLEVEL, SAMPLERATE, AUDIO_SNIPPET_PATH
 
 
 def main():
@@ -37,46 +35,33 @@ def main():
     logger.info("=" * 60)
     logger.info("Starting audio_rank_stitch (unified mode)")
     logger.info("=" * 60)
-    
-    # Initialize shared state
-    app_state = AppState()
-    logger.info("AppState initialized")
+
+    rankings = Rankings(logger=logger)
+    app_state = AppState(rankings, settings_path=AUDIO_SNIPPET_PATH / "settings.json")
+
+    rankings.build_rankings_from_disk(AUDIO_SNIPPET_PATH)
+    logger.info("Playback settings loaded, rankings initialized, and AppState created")
     
     # Initialize shared audio components
     mixer = Mixer()
     logger.info("Mixer initialized")
     
-    # Initialize I/O layers with AppState
-    disk_io = DiskIO(PATH, logger, SAMPLERATE, app_state=app_state)
+    # Initialize Disk I/O 
+    disk_io = DiskIO(AUDIO_SNIPPET_PATH, logger, SAMPLERATE)
+    disk_io.build_buffer_from_disk()
+    logger.info("DiskIO initialized and buffer built with recordings from disk")
     
-    logger.info("DiskIO and RankIO initialized with AppState")
-    
-    # Eagerly load rankings from disk on startup because that's when we have time
-    initial_rankings = rank_io.load_rankings().or_else(rank_io.generate_rankings)
-    if initial_rankings.is_success():
-        logger.info(f"Loaded {len(initial_rankings.get_value())} words from rankings")
-    else:
-        logger.warn("No initial rankings found - starting with empty rankings")
-    
-    # Load playback settings from disk (eager load). THIS DOESN't EXIST YET!!
-    settings_file = PATH / "settings.json"
-    rankings_file = PATH / "rankings.json"
 
-    rankings = Rankings.load(rankings_file)
-    app_state.load_settings(settings_file)
-    logger.info("Playback settings loaded")
-    
     # ===== RECORDING SETUP =====
-    recording_queue = RecordingQueue(logger)
-    recorder = Recorder(recording_queue, samplerate=SAMPLERATE, channels=1, logger=logger)
-    transcriber = Transcribe(8, logger, SAMPLERATE, device="cpu")
-    recording_frontend = RecordingFrontend(recorder=recorder, app_state=app_state)
+    telephone_recorder = Recorder(samplerate=SAMPLERATE, channels=1, logger=logger)
+    telephone_player = TelephonePlayer(mixer, samplerate=SAMPLERATE)
+    transcriber = Transcribe(batch_size = 8, logger=logger, samplerate=SAMPLERATE, device="cpu")
+    recording_frontend = RecordingFrontend(recorder=telephone_recorder, app_state=app_state)
     
     logger.info("Recording components initialized")
     
     # ===== PLAYBACK SETUP =====
-    telephone_player = TelephonePlayer(mixer, SAMPLERATE)
-    speaker_player = SpeakerPlayer(mixer, SAMPLERATE)
+    speaker_player = SpeakerPlayer(mixer, samplerate=SAMPLERATE)
     playback_frontend = PlaybackSettingsFrontend(app_state=app_state)
     
     logger.info("Playback components initialized")
@@ -86,10 +71,10 @@ def main():
         target=run_record_worker,
         args=(
             app_state,
-            recording_queue,
-            transcriber,
             disk_io,
             telephone_player,
+            telephone_recorder,
+            transcriber,
             recording_frontend,
             logger,
         ),
@@ -103,10 +88,8 @@ def main():
         target=run_playback_worker,
         args=(
             app_state,
-            rank_io,
             disk_io,
             speaker_player,
-            playback_frontend,
             logger,
         ),
         daemon=True,
@@ -142,26 +125,12 @@ def main():
         logger.info("=" * 60)
         
         # Signal workers to stop
-        app_state.shutdown_requested.set()
+        app_state.shutdown()
         logger.info("Shutdown signal sent to workers")
         
         # Wait for workers to finish current operations
         logger.info("Waiting for workers to finish...")
         threading.Event().wait(2)
-        
-        # Flush disk I/O (wait for async writes)
-        disk_io.flush_buffer()
-        logger.info("Disk I/O flushed")
-        
-        # Persist rankings to disk
-        logger.info("Persisting rankings to disk...")
-        rank
-        logger.info("Rankings persisted")
-        
-        # Persist playback settings to disk
-        logger.info("Persisting playback settings...")
-        app_state.persist_settings(PATH / "settings.json")
-        logger.info("Settings persisted")
         
         logger.info("Shutdown complete")
         sys.exit(0)
@@ -171,8 +140,6 @@ def main():
     # ===== MAIN LOOP =====
     logger.info("=" * 60)
     logger.info("Application running. Press Ctrl+C to quit.")
-    logger.info("Recording: http://localhost:5001")
-    logger.info("Playback: http://localhost:5000")
     logger.info("=" * 60)
     
     try:
