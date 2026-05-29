@@ -13,6 +13,7 @@ from scipy.io import wavfile
 
 from util.logger import Logger
 from util.result import Failure, Result, Success
+from util.stringcleaner import keep_words_and_numbers
 
 class NoRecordingsError(Exception):
     pass
@@ -57,6 +58,34 @@ class DiskIO:
 
         self.logger.debug(f"DiskIO buffer built with recordings for {len(self.buffer)} words")
 
+    def get_latest_raw_recording(self) -> Result[NDArray[np.float32], Exception]:
+        try:
+            raw_files = [
+                f for f in self.path.iterdir()
+                if f.is_file()
+                and f.suffix.lower() == ".wav"
+                and f.name.startswith("raw_")
+            ]
+
+            if not raw_files:
+                return Failure(NoRecordingsError("No raw recordings found"))
+            
+            latest_file = max(
+                raw_files,
+                key=lambda f: int(f.stem.removeprefix("raw_"))
+            )
+
+            samplerate, audio = wavfile.read(latest_file)
+
+            if samplerate != self.sampling_rate:
+                return Failure(SamplingRateMismatch(f"Expected {self.sampling_rate}, got {samplerate}")
+            )
+            return Success(np.asarray(audio, dtype=np.float32))
+
+        except Exception as exc:
+            return Failure(exc)
+
+
     def load_waves_for(self, word: str) -> Result[list[NDArray[np.float32]], Exception]:
         """Load recordings for a single word, newest first."""
         try:
@@ -99,13 +128,12 @@ class DiskIO:
             word_dir.mkdir(parents=True, exist_ok=True)
 
             saved_count = 0
-            now = int(time.time())
 
             for index, wave in enumerate(waves):
-                file_path = word_dir / f"{now}_{index}.wav"
+                file_path = word_dir / f"{int(time.time_ns())}_{index}.wav"
                 self.logger.debug(f"Saving wav at {file_path}")
                 self._buffered_write(word_key, file_path, wave)
-                saved_count += 1
+                saved_count = index + 1
 
             return Success(saved_count)
 
@@ -123,6 +151,38 @@ class DiskIO:
             return Success(1)
         except Exception as exc:
             self.logger.error(f"Encountered error while scheduling async save: {exc}")
+            return Failure(exc)
+        
+    def save_transcription(self, transcription: str) -> Result[int, Exception]:
+        """Save the transcription of a recording to disk."""
+        try:
+            self.path.mkdir(parents=True, exist_ok=True)
+            file_path = self.path / f"transcription_{time.time_ns()}.txt"
+            self.logger.debug(f"Saving transcription at {file_path}")
+            with open(file_path, "w") as f:
+                f.write(transcription)
+            return Success(1)
+        except Exception as exc:
+            self.logger.error(f"Encountered error while saving transcription: {exc}")
+            return Failure(exc)
+        
+    def get_all_transcriptions(self) -> Result[list[str], Exception]:
+        """Load all transcriptions from disk."""
+        try:
+            if not self.path.exists() or not self.path.is_dir():
+                return Failure(FileNotFoundError(f"Transcript path does not exist: {self.path}"))
+
+            transcriptions = []
+            for file in self.path.iterdir():
+                if file.is_file() and file.suffix == ".txt" and file.name.startswith("transcription_"):
+                    with open(file, "r") as f:
+                        # Just to make sure in case we have ever saved anything in the wrong way
+                        sentence = keep_words_and_numbers(f.read())
+                        transcriptions.append(sentence)
+                        
+            return Success(transcriptions)
+        except Exception as exc:
+            self.logger.error(f"Encountered error while loading transcriptions: {exc}")
             return Failure(exc)
 
     def save_waves(self, words_with_audio: dict[str, list[NDArray[np.float32]]]) -> Result[int, Exception]:

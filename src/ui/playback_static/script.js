@@ -4,8 +4,8 @@ const sliders = {
     decay: document.getElementById('decay'),
     silence: document.getElementById('silence'),
     shuffle: document.getElementById('shuffle'),
-    topk_a: document.getElementById('top_k_a'),
-    topk_b: document.getElementById('top_k_b'),
+    top_k_a: document.getElementById('top_k_a'),
+    top_k_b: document.getElementById('top_k_b'),
     pre_trim: document.getElementById('pre_trim'),
     post_trim: document.getElementById('post_trim'),
 };
@@ -15,8 +15,8 @@ const valueDisplays = {
     decay: document.getElementById('decay-value'),
     silence: document.getElementById('silence-value'),
     shuffle: document.getElementById('shuffle-value'),
-    topk_a: document.getElementById('top_k_a-value'),
-    topk_b: document.getElementById('top_k_b-value'),
+    top_k_a: document.getElementById('top_k_a-value'),
+    top_k_b: document.getElementById('top_k_b-value'),
     pre_trim: document.getElementById('pre_trim-value'),
     post_trim: document.getElementById('post_trim-value'),
 };
@@ -35,16 +35,16 @@ Object.entries(sliders).forEach(([key, slider]) => {
         const payload = {};
         switch (key) {
             case 'attack':
-                payload.attack = parseInt(value);
+                payload.attack = parseFloat(value);
                 break;
             case 'decay':
-                payload.decay = parseInt(value);
+                payload.decay = parseFloat(value);
                 break;
             case 'silence':
                 payload.silence_duration = parseFloat(value);
                 break;
             case 'shuffle':
-                payload.shuffle_factor = parseInt(value);
+                payload.shuffle_factor = parseFloat(value);
                 break;
             case 'top_k_a':
                 payload.top_k_a = parseInt(value);
@@ -161,7 +161,7 @@ function pollSettingsFromServer() {
 
 // Poll every 2 seconds for settings changes from other clients
 // This keeps the UI in sync across multiple browser tabs/windows
-setInterval(pollSettingsFromServer, 2000);
+setInterval(pollSettingsFromServer, 4000);
 
 // Initial poll to sync on page load
 pollSettingsFromServer();

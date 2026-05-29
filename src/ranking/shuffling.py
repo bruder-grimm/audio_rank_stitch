@@ -13,7 +13,6 @@ class Shuffle:
     def shuffle_top_k(
         self,
         words: dict[str, list[NDArray[float32]]],
-        ranks: dict[str, int],
         shuffle_factor: float,
     ) -> list[NDArray[float32]]:
         """

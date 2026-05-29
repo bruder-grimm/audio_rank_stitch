@@ -7,7 +7,7 @@ name = "audio-rank-stitch"
 version = "0.1.0"
 description = "Audio recording, transcription, and stitching tool"
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.12,<3.14"
 authors = [
     {name = "Marvin Grimm", email = "mrvn.grimm@gmail.com"},
     {name = "Christoph Zeckel", email = "derechtepanda@gmail.com"},

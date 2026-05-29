@@ -5,6 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 import sounddevice as sd
 from config import PHONE_CHANNEL, SPEAKER_CHANNEL, CHANNEL, PLAYBACK_BLOCKSIZE, SAMPLERATE
+from util.logger import Logger
 
 
 def singleton(cls):
@@ -30,7 +31,8 @@ class Mixer:
     - `play_left` and `play_right` accept 1-D numpy arrays of dtype float32.
     """
 
-    def __init__(self, sample_rate: int = SAMPLERATE, blocksize: int = PLAYBACK_BLOCKSIZE):
+    def __init__(self, logger: Logger, sample_rate: int = SAMPLERATE, blocksize: int = PLAYBACK_BLOCKSIZE):
+        self.logger = logger
         self.sample_rate = sample_rate
         self.blocksize = blocksize
         self.channels = 2
@@ -40,6 +42,10 @@ class Mixer:
         # Each channel keeps a list of active buffers: dicts with 'audio' and 'pos'.
         self._buffers: List[List[dict]] = [[], []]
         self._lock = threading.Lock()
+        
+        # It's like playheads but I don't know what I'm doing
+        self._frames_queued: List[int] = [0, 0]
+        self._frames_played: List[int] = [0, 0]
 
         self._stream = sd.OutputStream(
             samplerate=self.sample_rate,
@@ -51,13 +57,13 @@ class Mixer:
         self._stream.start()
 
     def _callback(self, outdata, frames, time, status):
-        # Fill output buffer by summing active buffers per channel.
         out = np.zeros((frames, self.channels), dtype=np.float32)
 
         with self._lock:
             for ch in (0, 1):
+                frames_consumed = 0
                 buffers = self._buffers[ch]
-                out_offset = 0  # Track position in output buffer
+                out_offset = 0
                 i = 0
                 while i < len(buffers) and out_offset < frames:
                     buf = buffers[i]
@@ -65,42 +71,45 @@ class Mixer:
                     pos = buf["pos"]
                     remaining = arr.shape[0] - pos
                     if remaining <= 0:
-                        # finished buffer, remove it
                         buffers.pop(i)
                         continue
 
-                    # Only fill remaining space in output buffer
-                    frames_available = frames - out_offset
-                    to_take = min(frames_available, remaining)
-                    out[out_offset:out_offset + to_take, ch] += arr[pos : pos + to_take]
+                    to_take = min(frames - out_offset, remaining)
+                    out[out_offset:out_offset + to_take, ch] += arr[pos:pos + to_take]
                     buf["pos"] += to_take
                     out_offset += to_take
+                    frames_consumed += to_take
 
                     if buf["pos"] >= arr.shape[0]:
                         buffers.pop(i)
                     else:
                         i += 1
 
-        # Write mixed output to outdata
+                self._frames_played[ch] += frames_consumed  # advance "playhead"
+
         outdata[:] = out
 
     def _queue_audio(
-            self, 
-            channel: CHANNEL, 
-            audio: NDArray[np.float32], 
-            playback_finished: Optional[threading.Event] = None
-        ) -> None:
+        self,
+        channel: CHANNEL,
+        audio: NDArray[np.float32],
+        playback_finished: Optional[threading.Event] = None,
+    ) -> None:
         if audio.ndim != 1:
             audio = audio.ravel()
         arr = np.asarray(audio, dtype=np.float32).copy()
-        wait_time = len(arr) / self.sample_rate + 0.1
 
-        if arr.size == 0:
-            return
         with self._lock:
+            # Frames still waiting to be played + the new audio = total wait
+            pending = self._frames_queued[channel.value] - self._frames_played[channel.value]
+            wait_frames = pending + len(arr)
+            wait_time = wait_frames / self.sample_rate
+
+            self._frames_queued[channel.value] += len(arr)
             self._buffers[channel.value].append({"audio": arr, "pos": 0})
 
         if playback_finished is not None:
+            self.logger.debug(f"Pending frames: {pending}, new frames: {len(arr)}, wait: {wait_time:.3f}s")
             threading.Timer(wait_time, playback_finished.set).start()
 
     def queue_phone(
@@ -118,30 +127,34 @@ class Mixer:
         self._queue_audio(SPEAKER_CHANNEL, audio, playback_finished)
 
     def play_phone_blocking(self, audio: NDArray[np.float32]) -> None:
-        # get wait time from audio length and sample rate, add small buffer time
+        self.logger.debug("Blocking for audio on phone")
         synchronization_event = threading.Event()
         self.queue_phone(audio, synchronization_event)
         synchronization_event.wait()
 
     def play_speaker_blocking(self, audio: NDArray[np.float32]) -> None:
+        self.logger.debug("Blocking for audio on speaker")
         synchronization_event = threading.Event()
         self.queue_speaker(audio, synchronization_event)
         synchronization_event.wait()
 
     def stop_phone(self) -> None:
-        """Stop phone playback immediately and clear phone buffers."""
         with self._lock:
             self._buffers[self.telephone_channel.value] = []
+            self._frames_queued[self.telephone_channel.value] = 0
+            self._frames_played[self.telephone_channel.value] = 0
 
     def stop_speaker(self) -> None:
-        """Stop speaker playback immediately and clear speaker buffers."""
         with self._lock:
             self._buffers[self.speaker_channel.value] = []
+            self._frames_queued[self.speaker_channel.value] = 0
+            self._frames_played[self.speaker_channel.value] = 0
 
     def stop_all(self) -> None:
-        """Stop playback and clear queued buffers."""
         with self._lock:
             self._buffers = [[], []]
+            self._frames_queued = [0, 0]
+            self._frames_played = [0, 0]
 
     def close(self) -> None:
         """Stop and close the output stream."""

@@ -1,7 +1,7 @@
 from collections import defaultdict
-from pathlib import Path
 import threading
 
+from ranking.embedding import Word
 from util.logger import Logger
 
 
@@ -11,48 +11,32 @@ class Rankings:
     """
 
     def __init__(self, logger: Logger) -> None:
-        self._counts: dict[str, int] = defaultdict(int)
+        self._counts: dict[Word, int] = defaultdict(int)
         self._is_sorted = False
         self._lock = threading.Lock()
 
         self.logger = logger
 
-    def build_rankings_from_disk(self, path: Path):
-        """Load rankings from disk and populate the in-memory rankings."""
-        if not path.exists() or not path.is_dir():
-            return
-        
-        for word_dir in path.iterdir():
-            if not word_dir.is_dir():
-                continue
-            
-            for file in word_dir.iterdir():
-                if file.is_file() and file.suffix.lower() == ".wav":
-                    self._counts[word_dir.name] += 1
-
-
     def is_empty(self) -> bool:
         with self._lock:
             return len(self._counts) == 0
 
-    def update_with(self, rankings: dict[str, int]) -> None:
-        """Accumulate another rankings dict into this one."""
-        with self._lock:
-            for word, count in rankings.items():
-                word = word.lower().strip()  # sanitize for my sanity
-                self._counts[word] += count
-
-            self._is_sorted = False
-
-    def update_from(self, strings: list[str]) -> None:
+    def _update(self, words: list[Word]) -> None:
         """Count incoming strings and merge them into the live rankings."""
+        for word in words:
+            self._counts[word] += 1
+
+        self._is_sorted = False
+
+    def update(self, words: list[Word]) -> None:
         with self._lock:
-            for string in strings:
-                string = string.lower().strip()
-                self._counts[string] += 1
+            self._update(words)
 
-            self._is_sorted = False
+    def train(self, sentences: list[list[Word]]) -> None:
+        with self._lock:
+            [self._update(words) for words in sentences]
 
+    @DeprecationWarning
     def get_top_k_words(self, k: int) -> dict[str, int]:
         """
         Return the top k words from the rankings.
@@ -65,6 +49,7 @@ class Rankings:
 
             return dict(list(self._counts.items())[:k])
 
+    @DeprecationWarning
     def get_words_for_topk_range(self, k_a: int, k_b: int) -> dict[str, int]:
         """
         Return rankings slice from k_a to k_b.
@@ -87,13 +72,5 @@ class Rankings:
         This is blocking and should be called after batch updates to the rankings, not on every update.
         """
         with self._lock:
-            self._counts = {
-                k: v
-                for k, v in sorted(
-                    self._counts.items(),
-                    key=lambda item: item[1],
-                    reverse=True,
-                )
-            }
-
+            self._counts = defaultdict(int, sorted(self._counts.items(), key=lambda x: x[1], reverse=True))
             self._is_sorted = True

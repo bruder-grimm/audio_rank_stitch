@@ -1,16 +1,23 @@
 from flask import Flask, render_template, jsonify, request
 from app_state import AppState
+from util.logger import Logger
 
 
 class PlaybackSettingsFrontend:
     """Web-based frontend for playback settings control."""
+
+    import logging
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
     
     def __init__(
             self, 
             app_state: AppState,
+            logger: Logger,
             host: str = "0.0.0.0", 
             port: int = 5000, 
         ):
+        self.logger = logger
         self.host = host
         self.port = port
         self._app_state = app_state
@@ -32,32 +39,54 @@ class PlaybackSettingsFrontend:
     def _get_state(self):
         """Get current state of all sliders from AppState or defaults."""
         settings = {
-            "attack": self._app_state.attack,
-            "decay": self._app_state.decay,
+            "attack": self._app_state.attack * 1000,
+            "decay": self._app_state.decay * 1000,
             "silence_duration": self._app_state.silence_duration,
-            "shuffle_factor": self._app_state.shuffle_factor,
+            "shuffle_factor": self._app_state.temperature,
             "top_k_a": self._app_state.top_k_a,
             "top_k_b": self._app_state.top_k_b,
+            "pre_trim": self._app_state.pre_trim * 1000,
+            "post_trim": self._app_state.post_trim * 1000,
         }
         return jsonify(settings)
     
     def _update_state(self):
         """Update slider values from client to AppState."""
         data = request.json
+
+        # Check if data isn't empty
+        if data:
+            print(data)
     
         # Fallback: local state only
         if "attack" in data:
-            self._app_state.attack = data["attack"]
+            attack = data["attack"] / 1000
+            self.logger.info(f"Setting attack to {attack}")
+            self._app_state.attack = attack
         if "decay" in data:
-            self._app_state.decay = data["decay"]
+            decay = data["decay"] / 1000
+            self.logger.info(f"Setting decay to {decay}")
+            self._app_state.decay = decay
         if "silence_duration" in data:
             self._app_state.silence_duration = data["silence_duration"]
+            self.logger.info(f"Setting silence_duration to {data["silence_duration"]}")
         if "shuffle_factor" in data:
-            self._app_state.shuffle_factor = data["shuffle_factor"]
+            self._app_state.temperature = data["shuffle_factor"]
+            self.logger.info(f"Setting shuffle_factor to {data["shuffle_factor"]}")
         if "top_k_a" in data:
             self._app_state.top_k_a = data["top_k_a"]
+            self.logger.info(f"Setting top_k_a to {data["top_k_a"]}")
         if "top_k_b" in data:
             self._app_state.top_k_b = data["top_k_b"]
+            self.logger.info(f"Setting top_k_b to {data["top_k_b"]}")
+        if "pre_trim" in data:
+            pre_trim = data["pre_trim"] / 1000
+            self.logger.info(f"Setting pre_trim to {pre_trim}")
+            self._app_state.pre_trim = pre_trim
+        if "post_trim" in data:
+            post_trim = data["post_trim"] / 1000
+            self.logger.info(f"Setting post_trim to {post_trim}")
+            self._app_state.post_trim = post_trim
         
         return jsonify({"status": "ok"})
     
@@ -71,28 +100,34 @@ class PlaybackSettingsFrontend:
         return jsonify({"status": "ok"})
     
     def _get_words(self):
-        """Get list of words to display."""
-        return jsonify({"words": self._app_state.get_current_top_k_selection()})
+        words = self._app_state.get_current_top_k_selection()
+        return jsonify({
+            "words": [
+                {"word": w, "count": c}
+                for w, c in words.items()
+            ]
+        })
     
-    def run(self, debug: bool = False):
+    def run(self, debug: bool) -> None:
         """Start the Flask server in a thread."""
+        self.logger.info(f"Starting Flask on http://{self.host}:{self.port}")
         self.app.run(host=self.host, port=self.port, debug=debug, use_reloader=False)
     
     # Properties for worker thread access
     @property
     def shuffle_factor(self) -> float:
         """Shuffle factor between 0 and 1."""
-        return self._app_state.shuffle_factor * 0.01
+        return self._app_state.temperature
     
     @property
     def attack(self) -> float:
         """Attack value between 0 and 1."""
-        return self._app_state.attack * 0.01
+        return self._app_state.attack
     
     @property
     def decay(self) -> float:
         """Decay value between 0 and 1."""
-        return self._app_state.decay * 0.01
+        return self._app_state.decay
     
     @property
     def silence_duration(self) -> float:
@@ -108,6 +143,14 @@ class PlaybackSettingsFrontend:
     def top_k_b(self) -> int:
         """Number of top words to consider."""
         return self._app_state.top_k_b
+    
+    @property
+    def pre_trim(self) -> float:
+        return self._app_state.pre_trim
+    
+    @property
+    def post_trim(self) -> float:
+        return self._app_state.post_trim
     
     @property
     def play_pressed(self) -> bool:

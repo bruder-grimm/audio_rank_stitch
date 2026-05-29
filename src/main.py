@@ -6,7 +6,6 @@ Runs both recording and playback servers in a single process with shared state.
 """
 
 import signal
-import socket
 import sys
 import threading
 
@@ -16,6 +15,8 @@ from audio.telephone_playback import TelephonePlayer
 from audio.telephone_record import Recorder
 from audio.audio_transcription import Transcribe
 from audio.speaker_playback import SpeakerPlayer
+from ranking.embedding import PosEmbeddingProvider
+from ranking.markov import PosMarkovModel
 from ranking.rankings import Rankings
 from ui.telephone_recording_server import RecordingFrontend
 from ui.speaker_playback_server import PlaybackSettingsFrontend
@@ -24,7 +25,7 @@ from workers.record_worker import run_record_worker
 from workers.playback_worker import run_playback_worker
 from app_state import AppState
 
-from config import LOGLEVEL, SAMPLERATE, AUDIO_SNIPPET_PATH
+from config import LOGLEVEL, PLAYBACK_PORT, RECORDING_PORT, SAMPLERATE, AUDIO_SNIPPET_PATH
 
 
 def main():
@@ -36,37 +37,65 @@ def main():
     logger.info("Starting audio_rank_stitch (unified mode)")
     logger.info("=" * 60)
 
-    rankings = Rankings(logger=logger)
-    app_state = AppState(rankings, settings_path=AUDIO_SNIPPET_PATH / "settings.json")
-
-    rankings.build_rankings_from_disk(AUDIO_SNIPPET_PATH)
-    logger.info("Playback settings loaded, rankings initialized, and AppState created")
-    
     # Initialize shared audio components
-    mixer = Mixer()
+    mixer = Mixer(logger=logger, sample_rate=SAMPLERATE)
     logger.info("Mixer initialized")
     
     # Initialize Disk I/O 
     disk_io = DiskIO(AUDIO_SNIPPET_PATH, logger, SAMPLERATE)
     disk_io.build_buffer_from_disk()
     logger.info("DiskIO initialized and buffer built with recordings from disk")
+
+    rankings = Rankings(logger=logger)
+    embeddings_provider = PosEmbeddingProvider()
+    markov_model = PosMarkovModel()
+
+    # Retrain the model and regenerate our rankings after a shutdown
+    embedded_sentences = disk_io.get_all_transcriptions().map(
+        lambda transcripts: [embeddings_provider.as_words_with_class(sentence.split()) for sentence in transcripts]
+    )
+    logger.debug(f"Embedded sentences: {embedded_sentences}")  # Debug print to verify embeddings
+    embedded_sentences.on_success(markov_model.train)
+    embedded_sentences.on_success(rankings.train)
+
+    logger.debug(f"{markov_model.get_most_frequent_words(0, 10)}")
+
+    app_state = AppState(
+        rankings=rankings, 
+        markov_model=markov_model,
+        embeddings_provider=embeddings_provider,
+        settings_path=AUDIO_SNIPPET_PATH / "settings.json"
+    )
+
+    logger.info("Playback settings loaded, rankings initialized, and AppState created")
     
 
-    # ===== RECORDING SETUP =====
+    # Initialize recording components
     telephone_recorder = Recorder(samplerate=SAMPLERATE, channels=1, logger=logger)
     telephone_player = TelephonePlayer(mixer, samplerate=SAMPLERATE)
     transcriber = Transcribe(batch_size = 8, logger=logger, samplerate=SAMPLERATE, device="cpu")
-    recording_frontend = RecordingFrontend(recorder=telephone_recorder, app_state=app_state)
+    recording_frontend = RecordingFrontend(
+        recorder=telephone_recorder, 
+        app_state=app_state,
+        logger=logger,
+        host="127.0.0.1",
+        port=RECORDING_PORT,
+    )
     
     logger.info("Recording components initialized")
     
-    # ===== PLAYBACK SETUP =====
+    # Initialize playback components
     speaker_player = SpeakerPlayer(mixer, samplerate=SAMPLERATE)
-    playback_frontend = PlaybackSettingsFrontend(app_state=app_state)
+    playback_frontend = PlaybackSettingsFrontend(
+        app_state=app_state,
+        logger=logger,
+        host="0.0.0.0",
+        port=PLAYBACK_PORT
+    )
     
     logger.info("Playback components initialized")
     
-    # ===== START WORKERS =====
+    # Start worker threads
     record_worker_thread = threading.Thread(
         target=run_record_worker,
         args=(
@@ -98,7 +127,7 @@ def main():
     playback_worker_thread.start()
     logger.info("Playback worker thread started")
     
-    # ===== START FLASK SERVERS =====
+    # Okay here we go: Start Flask servers
     recording_flask_thread = threading.Thread(
         target=recording_frontend.run,
         kwargs={"debug": False},
@@ -106,7 +135,6 @@ def main():
         name="RecordingFlask",
     )
     recording_flask_thread.start()
-    logger.info("RecordingFrontend started on http://localhost:5001")
     
     playback_flask_thread = threading.Thread(
         target=playback_frontend.run,
@@ -115,9 +143,9 @@ def main():
         name="PlaybackFlask",
     )
     playback_flask_thread.start()
-    logger.info(f"PlaybackSettingsFrontend started on http://{socket.gethostbyname(socket.gethostname())}:5000")
+    logger.info("Your ip is: Unknown sorry lol")
     
-    # ===== SIGNAL HANDLERS =====
+    # Setup signal handler for graceful shutdown
     def signal_handler(signum, frame):
         """Handle graceful shutdown on SIGINT (Ctrl+C)."""
         logger.info("\n" + "=" * 60)
@@ -137,7 +165,7 @@ def main():
     
     signal.signal(signal.SIGINT, signal_handler)
     
-    # ===== MAIN LOOP =====
+    # And awaaaay we go
     logger.info("=" * 60)
     logger.info("Application running. Press Ctrl+C to quit.")
     logger.info("=" * 60)

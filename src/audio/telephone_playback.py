@@ -1,3 +1,4 @@
+from pathlib import Path
 from threading import Event
 from typing import Optional
 
@@ -11,12 +12,13 @@ class TelephonePlayer:
     def __init__(self, mixer: Mixer, samplerate: int):
         self._mixer = mixer
         self.samplerate = samplerate
-        self._recording_tone = np.mean(np.asarray(
-            wavfile.read("../../assets/recording_tone.wav")[1], dtype=np.float32
-        ), axis=1)
-        self._start_dialing_tone = np.mean(np.asarray(
-            wavfile.read("../../assets/dialing_tone.wav")[1], dtype=np.float32
-        ), axis=1)
+        
+        self._recording_tone = np.asarray(
+            wavfile.read("./assets/recording_tone.wav")[1], dtype=np.float32
+        )
+        self._start_dialing_tone = np.asarray(
+            wavfile.read("./assets/dialing_tone.wav")[1], dtype=np.float32
+        )
 
     def clear_queue(self):
         self._mixer.stop_phone()

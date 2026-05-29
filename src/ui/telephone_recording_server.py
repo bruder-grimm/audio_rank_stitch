@@ -1,18 +1,25 @@
 from app_state import AppState
 from audio.telephone_record import Recorder
 from flask import Flask, render_template, jsonify, request
+from util.logger import Logger
 
 
 class RecordingFrontend:
     """Web-based frontend for recording display."""
+
+    import logging
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
     
     def __init__(
             self, 
             recorder: Recorder, 
             app_state: AppState,
+            logger: Logger,
             port: int = 5001, 
-            host: str = "127.0.0.1", 
+            host: str = "127.0.0.1",
         ):
+        self.logger = logger
         self.host = host
         self.port = port
         self.recorder = recorder
@@ -68,9 +75,10 @@ class RecordingFrontend:
             self._app_state.phone_picked_up.set()
         elif event_type == "up":
             self._app_state.phone_picked_up.clear()
-        
+
         return jsonify({"status": "ok"})
     
-    def run(self, debug: bool = False):
+    def run(self, debug: bool):
         """Start the Flask server."""
+        self.logger.info(f"Starting Flask on http://{self.host}:{self.port}")
         self.app.run(host=self.host, port=self.port, debug=debug, use_reloader=False)

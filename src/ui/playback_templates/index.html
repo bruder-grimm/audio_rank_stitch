@@ -12,32 +12,32 @@
         
         <section class="controls">
             <div class="slider-group">
-                <label for="attack">Attack (%)</label>
-                <input type="range" id="attack" min="0" max="100" value="50">
-                <span id="attack-value">50</span>%
+                <label for="attack">Attack (s)</label>
+                <input type="range" id="attack" min="0" max="300" value="10" step="1">
+                <span id="attack-value">10</span>ms
             </div>
             
             <div class="slider-group">
-                <label for="decay">Decay (%)</label>
-                <input type="range" id="decay" min="0" max="100" value="50">
-                <span id="decay-value">50</span>%
+                <label for="decay">Decay (s)</label>
+                <input type="range" id="decay" min="0" max="300" value="10" step="1">
+                <span id="decay-value">10</span>ms
             </div>
             
             <div class="slider-group">
                 <label for="silence">Silence (s)</label>
-                <input type="range" id="silence" min="0.1" max="5" step="0.1" value="1.0">
+                <input type="range" id="silence" min="0.1" max="10" step="0.1" value="1.0">
                 <span id="silence-value">1.0</span>s
             </div>
             
             <div class="slider-group">
-                <label for="shuffle">Shuffle / Spice (%)</label>
+                <label for="shuffle">Temeperature</label>
                 <input type="range" id="shuffle" min="0" max="100" value="50">
                 <span id="shuffle-value">50</span>%
             </div>
             
             <div class="slider-group">
                 <label for="top_k_a">Pre top k cutoff</label>
-                <input type="range" id="top_k_a" min="1" max="100" value="10">
+                <input type="range" id="top_k_a" min="0" max="100" value="10">
                 <span id="top_k_a-value">10</span>
             </div>
             
@@ -49,14 +49,14 @@
 
             <div class="slider-group">
                 <label for="pre_trim">Audio pre Trim (s)</label>
-                <input type="range" id="pre_trim" min="0" max="3" step="0.1" value="0.0">
-                <span id="pre_trim-value">0.0</span>s
+                <input type="range" id="pre_trim" min="0" max="300" step="1" value="10">
+                <span id="pre_trim-value">10</span>ms
             </div>
 
             <div class="slider-group">
                 <label for="post_trim">Audio post Trim (s)</label>
-                <input type="range" id="post_trim" min="0" max="3" step="0.1" value="0.0">
-                <span id="post_trim-value">0.0</span>s
+                <input type="range" id="post_trim" min="0" max="300" step="1" value="10">
+                <span id="post_trim-value">10</span>ms
             </div>
 
             <button id="play-btn" class="play-button">▶ Play</button>

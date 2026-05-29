@@ -48,6 +48,7 @@ class SpeakerPlayer():
         - playback_finished_event: An optional threading.Event to signal when playback is finished
         """
         # TODO: Make sure this works!!!
+        audio = audio.copy()
         audio = np.mean(audio, axis=1) if audio.ndim > 1 else audio
 
         # Apply pre and post trimming

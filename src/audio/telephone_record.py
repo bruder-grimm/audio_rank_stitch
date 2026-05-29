@@ -76,7 +76,6 @@ class Recorder:
         return Success(self._normalize_audio(full_audio))
 
 
-
     def _normalize_audio(self, audio: np.ndarray, target_rms: float = 0.1) -> np.ndarray:
         """Peak-safe RMS normalization.
 

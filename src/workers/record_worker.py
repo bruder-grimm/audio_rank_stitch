@@ -13,6 +13,7 @@ from util.logger import Logger
 from app_state import AppState
 import numpy as np
 from config import PRE_DIAL_DELAY_SECONDS, POST_RECORDING_PROCESSING_DELAY_SECONDS
+from util.stringcleaner import keep_words_and_numbers
 
 
 def run_record_worker(
@@ -31,45 +32,66 @@ def run_record_worker(
     Transcribes audio, extracts word segments, saves to disk, and caches in AppState.
     Updates rankings and Flask frontend as new words are added.
     """
+    last_recording: Optional[NDArray[np.float32]] = disk_io.get_latest_raw_recording().to_optional()
+
     while not app_state.shutdown_requested.is_set():
-        last_recording: Optional[NDArray[np.float32]] = None
 
         # Wait until the phone is picked up
         if not app_state.phone_picked_up.is_set():
-            threading.Event().wait(0.1)
+            time.sleep(0.1)
             continue
+
+        logger.info("Phone was picked up")
 
         # Phone was picked up, start the interaction
         # All of the audio here is queued and we return control to this script immediately.
-        dialing_beep_event = threading.Event()
-        last_recording_event = threading.Event()
-        flask_frontend.set_background_color("#dd00ff")
+        dialing_beep_played = threading.Event()
+        last_recording_played = threading.Event()
+        flask_frontend.set_background_color("#c913ba")
         phone_player.play_silence_async(PRE_DIAL_DELAY_SECONDS)
-        phone_player.play_dialing_start_beep_async(dialing_beep_event)
+        logger.debug("Queueing dialing beep")
+        phone_player.play_dialing_start_beep_async(dialing_beep_played)
         
-        event_to_check = last_recording_event if last_recording is not None else dialing_beep_event
+        event_to_check = last_recording_played if last_recording is not None else dialing_beep_played
         if last_recording is not None:
-            phone_player.play_async(last_recording, last_recording_event)
+            logger.debug("Queueing recording of the last person")
+            phone_player.play_async(last_recording, last_recording_played)
         
-        while not event_to_check.is_set():
-            if not app_state.phone_picked_up.is_set():
-                revert_to_idle_state(flask_frontend, phone_player)
-                continue
 
-        flask_frontend.set_background_color("#ff0000")
+        while not event_to_check.is_set():
+            time.sleep(0.1)
+            if not app_state.phone_picked_up.is_set():
+                event_to_check.set()
+                revert_to_idle_state(flask_frontend, phone_player)
+                break
+        if not app_state.phone_picked_up.is_set():
+            logger.info("Phone was put down prematurely")
+            continue
+
+        event_to_check.wait()
+        logger.debug("Done waiting")
+
         phone_player.play_recording_start_beep()
+        flask_frontend.set_background_color("#f20000")
         
         phone_recorder.start_recording()
-        while app_state.should_record.is_set():
-            threading.Event().wait(0.1)
+        while app_state.phone_picked_up.is_set():
+            time.sleep(0.1)
+
+        logger.info("Phone was put down after recording was finished")
 
         # We're done recording, process the audio
         flask_frontend.set_background_color("#000000")
         
         start_time = time.time()
-        possible_next_recording = phone_recorder.stop_and_get_recording().map(
-            lambda recording: process_recording(recording, disk_io, transcriber, app_state, logger)
+        possible_next_recording = phone_recorder.stop_and_get_recording()
+
+        possible_next_recording.foreach(
+            lambda recording: process_recording(recording, disk_io, transcriber, app_state, logger),
+            lambda exception: logger.error(f"Couldn't get recording: {exception}")
         )
+
+        last_recording = possible_next_recording.get_value() if possible_next_recording.is_success() else last_recording
         processing_time = time.time() - start_time
 
         # If processing the recording failed, log the error and revert to idle state
@@ -111,8 +133,16 @@ def process_recording(
         logger.error(f"Transcription failed: {transcription.get_error()}")
         return
     
+    sentence = keep_words_and_numbers(transcription.get_value()[0].lower())
+    
+    disk_io.save_transcription(sentence).on_failure(
+        lambda error: logger.error(f"Failed to save transcription: {error}")
+    )
+
     transcript, alignment_result = transcription.get_value()
     words_with_audio = transcriber.get_words_with_audio(recording, alignment_result)
+
+    vocabulary = list(words_with_audio.keys())
     
     # Save words and update rankings
     result = disk_io.save_waves(words_with_audio)
@@ -120,10 +150,11 @@ def process_recording(
         logger.error(f"Failed to save word snippets: {result.get_error()}")
         return
     
-    for word in words_with_audio.keys():
-        count = len(words_with_audio[word])
-        app_state.increment_ranking(word, count)
-        logger.info(f"Updated ranking for '{word}': +{count}")
-    
-    app_state.heapify_rankings()
+    classified_words = app_state.embeddings_provider.as_words_with_class(vocabulary)
+    logger.debug(f"Training on classified words: {classified_words}")
+
+    app_state.markov_model.update(classified_words)
+    app_state.rankings.update(classified_words)
+    app_state.rankings.heapify()
+
     logger.info(f"Sentence transcribed: {transcript}")
