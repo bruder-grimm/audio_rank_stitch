@@ -48,11 +48,15 @@ def run_playback_worker(
         logger.debug("Got words with audio")
 
         # Filter words with no recordings, randomly select one clip per word
-        shuffled = [
-            random.choice(audios)
-            for audios in words_with_audio.values()
-            if audios
-        ]
+        if app_state.run_the_list:
+            words_with_audio.values()
+        else:
+            shuffled = [
+                random.choice(audios)
+                for audios in words_with_audio.values()
+                if audios
+            ]
+
         logger.debug("Got our sampled words from the cached available sound bites")
 
         if queuing_is_go:

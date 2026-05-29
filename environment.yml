@@ -1,0 +1,19 @@
+name: audio-rank-stitch
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.12
+  - pip
+
+  - pip:
+      - pydub>=0.25.1
+      - numpy>=2.0
+      - sounddevice>=0.5.0
+      - pynput>=1.7.6
+      - whisperx>=3.0.1
+      - flask>=3.0.0
+      - pytest>=7.0
+      - black>=24.0
+      - ruff>=0.2.0
+      - flask>=3.0.0

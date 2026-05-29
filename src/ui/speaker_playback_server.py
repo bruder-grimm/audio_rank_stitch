@@ -47,6 +47,7 @@ class PlaybackSettingsFrontend:
             "top_k_b": self._app_state.top_k_b,
             "pre_trim": self._app_state.pre_trim * 1000,
             "post_trim": self._app_state.post_trim * 1000,
+            "run_the_list": self._app_state.run_the_list,
         }
         return jsonify(settings)
     
@@ -87,6 +88,8 @@ class PlaybackSettingsFrontend:
             post_trim = data["post_trim"] / 1000
             self.logger.info(f"Setting post_trim to {post_trim}")
             self._app_state.post_trim = post_trim
+        if "run_the_list" in data:
+            self._app_state.run_the_list = data["run_the_list"]
         
         return jsonify({"status": "ok"})
     

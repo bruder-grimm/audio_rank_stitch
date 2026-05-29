@@ -21,6 +21,8 @@ const valueDisplays = {
     post_trim: document.getElementById('post_trim-value'),
 };
 
+const runTheListCheckbox = document.getElementById('run_the_list');
+
 // Update displays and send to server
 Object.entries(sliders).forEach(([key, slider]) => {
     slider.addEventListener('input', (e) => {
@@ -68,6 +70,18 @@ Object.entries(sliders).forEach(([key, slider]) => {
             body: JSON.stringify(payload),
         }).catch(err => console.error('Error updating state:', err));
     });
+});
+
+
+// Running the list (for chirs)
+runTheListCheckbox.addEventListener('change', (e) => {
+    fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            run_the_list: e.target.checked
+        }),
+    }).catch(err => console.error('Error updating state:', err));
 });
 
 // Play/pause button logic
@@ -129,6 +143,13 @@ function pollSettingsFromServer() {
                 'pre_trim': 'pre_trim',
                 'post_trim': 'post_trim',
             };
+
+            if (
+                remoteSettings.run_the_list !== undefined &&
+                document.activeElement !== runTheListCheckbox
+            ) {
+                runTheListCheckbox.checked = remoteSettings.run_the_list;
+            }
             
             Object.entries(keyMapping).forEach(([apiKey, uiKey]) => {
                 const remoteValue = remoteSettings[apiKey];
