@@ -48,6 +48,7 @@ class PlaybackSettingsFrontend:
             "pre_trim": self._app_state.pre_trim * 1000,
             "post_trim": self._app_state.post_trim * 1000,
             "run_the_list": self._app_state.run_the_list,
+            "silence_stray": self._app_state.silence_stray,
             "is_playing": self._app_state.should_play.is_set(),
         }
         return jsonify(settings)
@@ -88,6 +89,9 @@ class PlaybackSettingsFrontend:
         if "run_the_list" in data:
             self.logger.info(f"Setting run the list to {data["run_the_list"]}")
             self._app_state.run_the_list = data["run_the_list"]
+        if "silence_stray" in data:
+            self.logger.info(f"Setting stray around silence to {data["silence_stray"]}")
+            self._app_state.silence_stray = data["silence_stray"]
 
         self._app_state.playback_dirty.set()
         

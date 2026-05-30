@@ -99,6 +99,18 @@ def run_playback_worker(
             # have what is hopefully uninterrupted plaback while we update our snippets
             # with the new audio that has been created by the recording thread!
             queuing_is_go = threading.Event()
-            audio_player.queue_silence(app_state.silence_duration, queuing_is_go)
+
+            silence_duration = app_state.silence_duration
+            if app_state.silence_stray:
+                silence_duration = silence_duration * random.lognormvariate(0, 0.35)
+                if app_state.temperature > 0.6:
+                    r = random.random()
+                    if r < 0.08:
+                        silence_duration *= 0.25  # quick second drip
+                    elif r < 0.15:
+                        silence_duration *= 2.0   # long buildup
+                
+
+            audio_player.queue_silence(silence_duration, queuing_is_go)
     
     logger.info("Playback worker shutting down...")

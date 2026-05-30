@@ -43,7 +43,7 @@ def main():
     # Initialize shared audio components
     plugins: list[AudioPlugin] = [
         Compressor(SAMPLERATE),
-        LowPassFilter(SAMPLERATE, LOWPASS_FREQ)
+        LowPassFilter(SAMPLERATE, LOWPASS_FREQ),
     ]
     mixer = Mixer(post_mixer_chain=plugins, logger=logger, sample_rate=SAMPLERATE)
     logger.info("Mixer initialized")

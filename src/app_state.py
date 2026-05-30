@@ -56,6 +56,7 @@ class AppState:
         self.should_play = threading.Event()
         self.shutdown_requested = threading.Event()
         self.run_the_list: bool = False
+        self.silence_stray: bool = False
         
         # Locks
         self.instruction_lock = threading.Lock()

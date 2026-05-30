@@ -83,6 +83,16 @@ runTheListCheckbox.addEventListener('change', (e) => {
         }),
     }).catch(err => console.error('Error updating state:', err));
 });
+// Straying around the silence (also for chris)
+runTheListCheckbox.addEventListener('change', (e) => {
+    fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            silence_stray: e.target.checked
+        }),
+    }).catch(err => console.error('Error updating state:', err));
+});
 
 let isPlaying = false;
 // Play/pause button logic
