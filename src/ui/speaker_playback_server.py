@@ -55,10 +55,6 @@ class PlaybackSettingsFrontend:
         """Update slider values from client to AppState."""
         data = request.json
 
-        # Check if data isn't empty
-        if data:
-            print(data)
-    
         # Fallback: local state only
         if "attack" in data:
             attack = data["attack"] / 1000
@@ -89,7 +85,10 @@ class PlaybackSettingsFrontend:
             self.logger.info(f"Setting post_trim to {post_trim}")
             self._app_state.post_trim = post_trim
         if "run_the_list" in data:
+            self.logger.info(f"Setting run the list to {data["run_the_list"]}")
             self._app_state.run_the_list = data["run_the_list"]
+
+        self._app_state.playback_dirty.set()
         
         return jsonify({"status": "ok"})
     

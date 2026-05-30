@@ -25,7 +25,7 @@ const runTheListCheckbox = document.getElementById('run_the_list');
 
 // Update displays and send to server
 Object.entries(sliders).forEach(([key, slider]) => {
-    slider.addEventListener('input', (e) => {
+    slider.addEventListener('change', (e) => {
         const value = e.target.value;
         if (key === 'silence') {
             valueDisplays[key].textContent = parseFloat(value).toFixed(1);

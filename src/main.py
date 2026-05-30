@@ -11,6 +11,8 @@ import threading
 
 from audio.loading.audio_disk_io import DiskIO
 from audio.mixer.audio_mixer import Mixer
+from audio.plugins.audio_plugins import AudioPlugin
+from audio.plugins.compressor import Compressor
 from audio.telephone_playback import TelephonePlayer
 from audio.telephone_record import Recorder
 from audio.audio_transcription import Transcribe
@@ -38,7 +40,10 @@ def main():
     logger.info("=" * 60)
 
     # Initialize shared audio components
-    mixer = Mixer(logger=logger, sample_rate=SAMPLERATE)
+    plugins: list[AudioPlugin] = [
+        Compressor(SAMPLERATE)
+    ]
+    mixer = Mixer(post_mixer_chain=plugins, logger=logger, sample_rate=SAMPLERATE)
     logger.info("Mixer initialized")
     
     # Initialize Disk I/O 

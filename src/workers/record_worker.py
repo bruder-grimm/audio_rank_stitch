@@ -4,6 +4,7 @@ import threading
 import time
 from typing import Optional
 from audio.loading.audio_disk_io import DiskIO
+from audio.loading.filename import get_key_from_word
 from audio.telephone_playback import TelephonePlayer
 from audio.telephone_record import Recorder
 from audio.audio_transcription import Transcribe
@@ -13,7 +14,6 @@ from util.logger import Logger
 from app_state import AppState
 import numpy as np
 from config import PRE_DIAL_DELAY_SECONDS, POST_RECORDING_PROCESSING_DELAY_SECONDS
-from util.stringcleaner import keep_words_and_numbers
 
 
 def run_record_worker(
@@ -133,7 +133,7 @@ def process_recording(
         logger.error(f"Transcription failed: {transcription.get_error()}")
         return
     
-    sentence = keep_words_and_numbers(transcription.get_value()[0].lower())
+    sentence = get_key_from_word(transcription.get_value()[0].lower())
     
     disk_io.save_transcription(sentence).on_failure(
         lambda error: logger.error(f"Failed to save transcription: {error}")
@@ -143,6 +143,7 @@ def process_recording(
     words_with_audio = transcriber.get_words_with_audio(recording, alignment_result)
 
     vocabulary = list(words_with_audio.keys())
+    vocabulary = [get_key_from_word(word) for word in vocabulary]
     
     # Save words and update rankings
     result = disk_io.save_waves(words_with_audio)

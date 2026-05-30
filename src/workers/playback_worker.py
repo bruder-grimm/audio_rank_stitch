@@ -1,5 +1,6 @@
 """Playback worker thread for playing ranked audio."""
 
+import itertools
 import random
 import threading
 import time
@@ -30,6 +31,8 @@ def run_playback_worker(
         if not app_state.should_play.is_set():
             time.sleep(0.1)
             continue
+
+        print(app_state.markov_model.generate(20, app_state.temperature))
         
         top_words = list(app_state.get_current_top_k_selection().keys())
         logger.debug(f"Top words are: {top_words}")
@@ -38,6 +41,9 @@ def run_playback_worker(
             SENTENCE_LENGTH, 
             app_state.temperature
         )
+        if app_state.run_the_list:
+            new_sentence = top_words
+        
         logger.info(f"Generated new sentence: {new_sentence}")
 
         # Load audio snippets for top k words (with caching - do NOT worry ok thanks)
@@ -45,32 +51,35 @@ def run_playback_worker(
             word: disk_io.load_waves_for(word).get_or_else([]) 
             for word in new_sentence 
         }
-        logger.debug("Got words with audio")
 
         # Filter words with no recordings, randomly select one clip per word
+        shuffled = [
+            random.choice(audios)
+            for audios in words_with_audio.values()
+            if audios
+        ]
         if app_state.run_the_list:
-            words_with_audio.values()
-        else:
-            shuffled = [
-                random.choice(audios)
-                for audios in words_with_audio.values()
-                if audios
-            ]
+            shuffled = list(words_with_audio.values())
+            shuffled = list(itertools.chain.from_iterable(shuffled))
 
-        logger.debug("Got our sampled words from the cached available sound bites")
+        logger.debug(f"Playable clips: {len(shuffled)}...??")
 
         if queuing_is_go:
             logger.debug("Waiting for go from silence...")
             queuing_is_go.wait()
 
+        app_state.playback_dirty.clear()
+
         for audio in shuffled:
             # Stop current playback if should_play is unset during playback
             if not app_state.should_play.is_set():
+                logger.debug("Play isn't set anymore, aborting")
                 audio_player.stop()
                 break
 
             # Don't stop the playback but stop queuing if the data has been touched
             if app_state.playback_dirty.is_set():
+                logger.debug("Playback was dirty, aborting")
                 break
 
             # Block during playback of a single snippet because we don't want to fill our

@@ -10,10 +10,10 @@ from audio.loading.filename import get_key_from_word
 import numpy as np
 from numpy.typing import NDArray
 from scipy.io import wavfile
+import pyloudnorm as pyln
 
 from util.logger import Logger
 from util.result import Failure, Result, Success
-from util.stringcleaner import keep_words_and_numbers
 
 class NoRecordingsError(Exception):
     pass
@@ -46,6 +46,7 @@ class DiskIO:
         self.sampling_rate = sampling_rate
         self.logger = logger
         self.buffer: DefaultDict[str, list[Recording]] = defaultdict(list)
+        self.meter = pyln.Meter(sampling_rate) # create BS.1770 meter
 
     def build_buffer_from_disk(self) -> None:
         """Populate the in-memory cache for all saved word recordings."""
@@ -177,7 +178,7 @@ class DiskIO:
                 if file.is_file() and file.suffix == ".txt" and file.name.startswith("transcription_"):
                     with open(file, "r") as f:
                         # Just to make sure in case we have ever saved anything in the wrong way
-                        sentence = keep_words_and_numbers(f.read())
+                        sentence = get_key_from_word(f.read()).lower()
                         transcriptions.append(sentence)
                         
             return Success(transcriptions)
@@ -229,12 +230,19 @@ class DiskIO:
     def _buffered_write(self, word: str, path: Path, audio: NDArray[np.float32]) -> None:
         timestamp = int(path.stem.split("_")[0])
         audio_copy = np.asarray(audio, dtype=np.float32).copy()
+        
+        # For normalization: measure the loudness first 
+        loudness = self.meter.integrated_loudness(audio_copy)
+
+        # loudness normalize audio to -12 dB LUFS
+        loudness_normalized_audio = pyln.normalize.loudness(audio_copy, loudness, -12.0)
+
         self.buffer[word].append(
             Recording(
                 sampling_rate=self.sampling_rate,
                 timestamp=timestamp,
-                wav=audio_copy,
+                wav=loudness_normalized_audio,
                 path=path,
             )
         )
-        wavfile.write(path, self.sampling_rate, audio_copy)
+        wavfile.write(path, self.sampling_rate, loudness_normalized_audio)
