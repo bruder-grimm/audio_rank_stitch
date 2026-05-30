@@ -17,8 +17,9 @@ class CHANNEL(Enum):
 PHONE_CHANNEL = CHANNEL.LEFT
 SPEAKER_CHANNEL = CHANNEL.RIGHT
 
-# Config for our Recordings
+# Config for our Recordings and playback
 SAMPLERATE = 44100
+LOWPASS_FREQ = 8000 # in hz
 AUDIO_SNIPPET_PATH = Path(__file__).resolve().parent / "../word_snippets"
 
 # WhisperX config (don't touch that sample rate)
@@ -38,5 +39,11 @@ PLAYBACK_PORT = 5678
 INSTRUCTIONS = [
     "Where did cotton eye joe come from?",
     "Where did cotton eye joe go?",
-    "What is your favourite snack from the gas station?",
+    "where did the jogo",
+    "what is a cotton eye",
+    "do you want to find out?",
+    "ill tell ya",
+    "are you sure about that?",
+    "pick up the phone then",
+    "  .   ",
 ]

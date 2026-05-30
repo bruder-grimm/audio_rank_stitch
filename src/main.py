@@ -13,6 +13,7 @@ from audio.loading.audio_disk_io import DiskIO
 from audio.mixer.audio_mixer import Mixer
 from audio.plugins.audio_plugins import AudioPlugin
 from audio.plugins.compressor import Compressor
+from audio.plugins.lowpass_filter import LowPassFilter
 from audio.telephone_playback import TelephonePlayer
 from audio.telephone_record import Recorder
 from audio.audio_transcription import Transcribe
@@ -27,7 +28,7 @@ from workers.record_worker import run_record_worker
 from workers.playback_worker import run_playback_worker
 from app_state import AppState
 
-from config import LOGLEVEL, PLAYBACK_PORT, RECORDING_PORT, SAMPLERATE, AUDIO_SNIPPET_PATH
+from config import LOGLEVEL, PLAYBACK_PORT, RECORDING_PORT, SAMPLERATE, AUDIO_SNIPPET_PATH, LOWPASS_FREQ
 
 
 def main():
@@ -41,7 +42,8 @@ def main():
 
     # Initialize shared audio components
     plugins: list[AudioPlugin] = [
-        Compressor(SAMPLERATE)
+        Compressor(SAMPLERATE),
+        LowPassFilter(SAMPLERATE, LOWPASS_FREQ)
     ]
     mixer = Mixer(post_mixer_chain=plugins, logger=logger, sample_rate=SAMPLERATE)
     logger.info("Mixer initialized")
@@ -83,7 +85,7 @@ def main():
         recorder=telephone_recorder, 
         app_state=app_state,
         logger=logger,
-        host="127.0.0.1",
+        host="0.0.0.0",
         port=RECORDING_PORT,
     )
     

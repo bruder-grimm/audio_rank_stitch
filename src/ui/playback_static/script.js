@@ -84,21 +84,16 @@ runTheListCheckbox.addEventListener('change', (e) => {
     }).catch(err => console.error('Error updating state:', err));
 });
 
+let isPlaying = false;
 // Play/pause button logic
 const playButton = document.getElementById('play-btn');
-
-let isPlaying = false;
-
 playButton.addEventListener('click', () => {
     fetch('/api/play', { method: 'POST' })
         .then(() => {
             isPlaying = !isPlaying;
-
-            playButton.textContent = isPlaying
-                ? '⏸ Pause'
-                : '▶ Play';
+            playButton.textContent = isPlaying ? '⏸ Pause' : '▶ Play';
         })
-        .catch(err => console.error('Error triggering play:', err));
+        .catch(err => console.error(err));
 });
 
 // Poll for words updates
@@ -149,6 +144,14 @@ function pollSettingsFromServer() {
                 document.activeElement !== runTheListCheckbox
             ) {
                 runTheListCheckbox.checked = remoteSettings.run_the_list;
+            }
+
+            if (remoteSettings.is_playing !== undefined) {
+                isPlaying = remoteSettings.is_playing;
+
+                playButton.textContent = isPlaying
+                    ? '⏸ Pause'
+                    : '▶ Play';
             }
             
             Object.entries(keyMapping).forEach(([apiKey, uiKey]) => {

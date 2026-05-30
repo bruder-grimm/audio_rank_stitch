@@ -48,6 +48,7 @@ class PlaybackSettingsFrontend:
             "pre_trim": self._app_state.pre_trim * 1000,
             "post_trim": self._app_state.post_trim * 1000,
             "run_the_list": self._app_state.run_the_list,
+            "is_playing": self._app_state.should_play.is_set(),
         }
         return jsonify(settings)
     
@@ -114,50 +115,3 @@ class PlaybackSettingsFrontend:
         """Start the Flask server in a thread."""
         self.logger.info(f"Starting Flask on http://{self.host}:{self.port}")
         self.app.run(host=self.host, port=self.port, debug=debug, use_reloader=False)
-    
-    # Properties for worker thread access
-    @property
-    def shuffle_factor(self) -> float:
-        """Shuffle factor between 0 and 1."""
-        return self._app_state.temperature
-    
-    @property
-    def attack(self) -> float:
-        """Attack value between 0 and 1."""
-        return self._app_state.attack
-    
-    @property
-    def decay(self) -> float:
-        """Decay value between 0 and 1."""
-        return self._app_state.decay
-    
-    @property
-    def silence_duration(self) -> float:
-        """Silence duration in seconds (0.1–5)."""
-        return self._app_state.silence_duration
-    
-    @property
-    def top_k_a(self) -> int:
-        """Number of top words to consider."""
-        return self._app_state.top_k_a
-
-    @property
-    def top_k_b(self) -> int:
-        """Number of top words to consider."""
-        return self._app_state.top_k_b
-    
-    @property
-    def pre_trim(self) -> float:
-        return self._app_state.pre_trim
-    
-    @property
-    def post_trim(self) -> float:
-        return self._app_state.post_trim
-    
-    @property
-    def play_pressed(self) -> bool:
-        if self._app_state.should_play.is_set():
-            self._app_state.should_play.clear()
-            return True
-        return False
-
