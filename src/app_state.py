@@ -39,6 +39,7 @@ class AppState:
         self.top_k_b: int = 10
         self.pre_trim: float = 0.0
         self.post_trim: float = 0.0
+        self.sentence_length = 20
 
         # Recording flags
         self.instruction_index: int = 0

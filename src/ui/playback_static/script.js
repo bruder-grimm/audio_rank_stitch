@@ -8,6 +8,7 @@ const sliders = {
     top_k_b: document.getElementById('top_k_b'),
     pre_trim: document.getElementById('pre_trim'),
     post_trim: document.getElementById('post_trim'),
+    sentence_length: document.getElementById('sentence_length'),
 };
 
 const valueDisplays = {
@@ -19,6 +20,7 @@ const valueDisplays = {
     top_k_b: document.getElementById('top_k_b-value'),
     pre_trim: document.getElementById('pre_trim-value'),
     post_trim: document.getElementById('post_trim-value'),
+    sentence_length: document.getElementById('sentence_length-value'),
 };
 
 const runTheListCheckbox = document.getElementById('run_the_list');
@@ -59,6 +61,9 @@ Object.entries(sliders).forEach(([key, slider]) => {
                 break;
             case 'post_trim':
                 payload.post_trim = parseFloat(value);
+                break;
+            case 'sentence_length':
+                payload.sentence_length = parseInt(value);
                 break;
             default:
                 break;
@@ -147,6 +152,7 @@ function pollSettingsFromServer() {
                 'top_k_b': 'top_k_b',
                 'pre_trim': 'pre_trim',
                 'post_trim': 'post_trim',
+                'sentence_length': 'sentence_length',
             };
 
             if (

@@ -50,6 +50,7 @@ class PlaybackSettingsFrontend:
             "run_the_list": self._app_state.run_the_list,
             "silence_stray": self._app_state.silence_stray,
             "is_playing": self._app_state.should_play.is_set(),
+            "sentence_length": self._app_state.sentence_length,
         }
         return jsonify(settings)
     
@@ -92,6 +93,9 @@ class PlaybackSettingsFrontend:
         if "silence_stray" in data:
             self.logger.info(f"Setting stray around silence to {data["silence_stray"]}")
             self._app_state.silence_stray = data["silence_stray"]
+        if "sentence_length" in data:
+            self.logger.info(f"Setting sentence length to {data["sentence_length"]}")
+            self._app_state.sentence_length = data["sentence_length"]
 
         self._app_state.playback_dirty.set()
         

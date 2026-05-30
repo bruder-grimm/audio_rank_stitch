@@ -32,14 +32,15 @@ def run_playback_worker(
             time.sleep(0.1)
             continue
 
-        print(app_state.markov_model.generate(20, app_state.temperature))
         
         top_words = list(app_state.get_current_top_k_selection().keys())
         logger.debug(f"Top words are: {top_words}")
         new_sentence = app_state.markov_model.generate_from_pool(
-            top_words, 
-            SENTENCE_LENGTH, 
-            app_state.temperature
+            word_pool=top_words, 
+            max_words=app_state.sentence_length, 
+            temperature=app_state.temperature,
+            require_all=True,
+            max_retries=100
         )
         if app_state.run_the_list:
             new_sentence = top_words

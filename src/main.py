@@ -45,7 +45,7 @@ def main():
         Compressor(SAMPLERATE),
         LowPassFilter(SAMPLERATE, LOWPASS_FREQ),
     ]
-    mixer = Mixer(post_mixer_chain=plugins, logger=logger, sample_rate=SAMPLERATE)
+    mixer = Mixer(post_mixer_chain_speaker=plugins, logger=logger, sample_rate=SAMPLERATE)
     logger.info("Mixer initialized")
     
     # Initialize Disk I/O 
@@ -55,7 +55,7 @@ def main():
 
     rankings = Rankings(logger=logger)
     embeddings_provider = PosEmbeddingProvider()
-    markov_model = PosMarkovModel()
+    markov_model = PosMarkovModel(decay=0.95)
 
     # Retrain the model and regenerate our rankings after a shutdown
     embedded_sentences = disk_io.get_all_transcriptions().map(

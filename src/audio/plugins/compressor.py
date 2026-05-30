@@ -18,4 +18,5 @@ class Compressor:
         )
 
     def process(self, audio: NDArray[np.float32]) -> NDArray[np.float32]:
-        return self.compressor.process(audio, self.sample_rate)
+        result = self.compressor.process(audio[np.newaxis, :], self.sample_rate)  # (frames,) → (1, frames)
+        return result[0].astype(np.float32)

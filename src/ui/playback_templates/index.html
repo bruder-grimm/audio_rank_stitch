@@ -30,9 +30,15 @@
             </div>
             
             <div class="slider-group">
-                <label for="shuffle">🌡️</label>
+                <label for="shuffle">Temperature</label>
                 <input type="range" id="shuffle" min="0" max="100" value="50">
                 <span id="shuffle-value">50</span>%
+            </div>
+
+            <div class="slider-group">
+                <label for="sentence_length">~ Sentence Length</label>
+                <input type="range" id="sentence_length" min="10" max="50" value="20">
+                <span id="sentence_length-value">20</span> Words
             </div>
             
             <div class="slider-group">
@@ -65,7 +71,7 @@
                     Run the list
                 </label>
             </div>
-            div class="checkbox-group">
+            <div class="checkbox-group">
                 <label>
                     <input type="checkbox" id="silence_stray">
                     Stray around silence

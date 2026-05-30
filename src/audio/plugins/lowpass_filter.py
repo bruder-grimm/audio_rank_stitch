@@ -1,18 +1,13 @@
+from scipy.signal import butter, sosfilt, sosfilt_zi
 import numpy as np
-from scipy.signal import butter, sosfilt
 from numpy.typing import NDArray
 
-
 class LowPassFilter:
-    def __init__(self, sample_rate: int, cutoff_hz: float = 8000.0, order: int = 4):
-        self.sos = butter(
-            order,
-            cutoff_hz,
-            btype="low",
-            fs=sample_rate,
-            output="sos",
-        )
+    def __init__(self, sample_rate: float = 44100.0, cutoff_hz: float = 8000.0, order: int = 4):
+        nyquist = sample_rate / 2.0
+        self.sos = butter(order, cutoff_hz / nyquist, btype='low', output='sos')
+        self.zi = sosfilt_zi(self.sos)
 
     def process(self, audio: NDArray[np.float32]) -> NDArray[np.float32]:
-        filtered = sosfilt(self.sos, audio)
-        return filtered.astype(np.float32) # type: ignore
+        filtered, self.zi = sosfilt(self.sos, audio, zi=self.zi)
+        return filtered.astype(np.float32)

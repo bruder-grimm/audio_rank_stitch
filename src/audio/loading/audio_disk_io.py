@@ -168,20 +168,32 @@ class DiskIO:
             return Failure(exc)
         
     def get_all_transcriptions(self) -> Result[list[str], Exception]:
-        """Load all transcriptions from disk."""
+        """Load all transcriptions from disk, oldest first."""
         try:
             if not self.path.exists() or not self.path.is_dir():
-                return Failure(FileNotFoundError(f"Transcript path does not exist: {self.path}"))
+                return Failure(
+                    FileNotFoundError(f"Transcript path does not exist: {self.path}")
+                )
+
+            files = sorted(
+                (
+                    file
+                    for file in self.path.iterdir()
+                    if file.is_file()
+                    and file.suffix == ".txt"
+                    and file.name.startswith("transcription_")
+                ),
+                key=lambda f: int(f.stem.removeprefix("transcription_")),
+            )
 
             transcriptions = []
-            for file in self.path.iterdir():
-                if file.is_file() and file.suffix == ".txt" and file.name.startswith("transcription_"):
-                    with open(file, "r") as f:
-                        # Just to make sure in case we have ever saved anything in the wrong way
-                        sentence = get_key_from_word(f.read()).lower()
-                        transcriptions.append(sentence)
-                        
+            for file in files:
+                with open(file, "r") as f:
+                    sentence = get_key_from_word(f.read()).lower()
+                    transcriptions.append(sentence)
+
             return Success(transcriptions)
+
         except Exception as exc:
             self.logger.error(f"Encountered error while loading transcriptions: {exc}")
             return Failure(exc)

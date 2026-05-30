@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 import threading
-from collections import Counter, defaultdict
+from collections import defaultdict
 
 from ranking.embedding import Word
 
@@ -20,47 +20,59 @@ class PosMarkovModel:
 
     Also tracks:
         POS -> word frequencies
+
+    Args:
+        decay: Multiplicative factor applied to all existing counts before each
+               new sentence is ingested. Values below 1.0 cause older observations
+               to lose influence relative to newer ones.
+
+               Examples:
+                 1.00 = no decay (uniform weighting, original behaviour)
+                 0.99 = gentle decay; suits large, slowly-changing corpora
+                 0.95 = moderate decay; good default for streaming updates
+                 0.80 = aggressive decay; model nearly forgets old data quickly
     """
 
-    def __init__(self) -> None:
+    def __init__(self, decay: float = 1.0) -> None:
+        if not (0.0 < decay <= 1.0):
+            raise ValueError(f"decay must be in (0, 1], got {decay}")
+
         self._lock = threading.Lock()
+        self._decay = decay
 
-        # (prev_pos, current_pos) -> Counter(next_pos)
-        self._pos_transitions: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
+        # (prev_pos, current_pos) -> {next_pos: weight}
+        self._pos_transitions: dict[tuple[str, str], dict[str, float]] = defaultdict(
+            lambda: defaultdict(float)
+        )
 
-        # POS -> Counter(words)
-        self._word_distributions: dict[str, Counter[str]] = defaultdict(Counter)
+        # POS -> {word: weight}
+        self._word_distributions: dict[str, dict[str, float]] = defaultdict(
+            lambda: defaultdict(float)
+        )
+
+    # ------------------------------------------------------------------
+    # Public training API
+    # ------------------------------------------------------------------
 
     def update(self, sentence: list[Word]) -> None:
-        """Update with a single sentence."""
+        """Ingest a single sentence, applying recency decay first."""
         with self._lock:
+            self._apply_decay()
             self._update(sentence)
 
     def train(self, sentences: list[list[Word]]) -> None:
-        """ Train on multiple sentences."""
+        """Ingest multiple sentences, applying decay before each one."""
         with self._lock:
             for sentence in sentences:
+                self._apply_decay()
                 self._update(sentence)
 
-    def _update(self, sentence: list[Word]) -> None:
-        """ Build trigram POS transitions from a sentence """
-        pos_sequence = [START, START]
-
-        for word in sentence:
-            self._word_distributions[word.pos][word.actual_word] += 1
-            pos_sequence.append(word.pos)
-
-        pos_sequence.append(END)
-
-        for prev_pos, current_pos, next_pos in zip(
-            pos_sequence,
-            pos_sequence[1:],
-            pos_sequence[2:],
-        ):
-            self._pos_transitions[(prev_pos, current_pos)][next_pos] += 1
+    # ------------------------------------------------------------------
+    # Public generation API
+    # ------------------------------------------------------------------
 
     def generate(self, max_words: int = 20, temperature: float = 1.0) -> list[str]:
-        """Generate a sentence"""
+        """Generate a sentence using the learnt POS trigram model."""
         with self._lock:
             if (START, START) not in self._pos_transitions:
                 return []
@@ -88,18 +100,17 @@ class PosMarkovModel:
         max_retries: int = 100,
     ) -> list[str]:
         """
-        Generate sentences biased toward a given word pool.
+        Generate a sentence biased toward a given word pool.
 
-        If require_all=True, tries to include every pool word.
+        If *require_all* is True the method retries up to *max_retries* times,
+        returning the attempt that managed to place the most pool words.
         """
-
         with self._lock:
             if (START, START) not in self._pos_transitions:
                 return []
 
             word_to_pos = self._build_word_to_pos_map()
 
-            # Filter unknown words
             unknown_words = [w for w in word_pool if w not in word_to_pos]
             if unknown_words:
                 print(f"[generate_from_pool] Unknown words ignored: {unknown_words}")
@@ -109,7 +120,6 @@ class PosMarkovModel:
             def attempt() -> tuple[list[str], set[str]]:
                 remaining = set(target_words)
                 result: list[str] = []
-
                 prev_pos, current_pos = START, START
 
                 while len(result) < max_words:
@@ -119,10 +129,7 @@ class PosMarkovModel:
                         break
 
                     word = self._select_word_for_pos(
-                        next_pos,
-                        remaining,
-                        word_to_pos,
-                        temperature,
+                        next_pos, remaining, word_to_pos, temperature
                     )
 
                     if word:
@@ -135,11 +142,9 @@ class PosMarkovModel:
 
                 return result, remaining
 
-            # Simple generation mode
             if not require_all:
                 return attempt()[0]
 
-            # Best-effort retry loop
             best_result: list[str] = []
             best_remaining: set[str] = target_words
 
@@ -153,16 +158,76 @@ class PosMarkovModel:
                     best_result, best_remaining = result, remaining
 
             print(
-                f"[generate_from_pool] Could not place all words after {max_retries} tries. "
-                f"Remaining: {best_remaining}"
+                f"[generate_from_pool] Could not place all words after {max_retries} "
+                f"tries. Remaining: {best_remaining}"
             )
             return best_result
 
+    # ------------------------------------------------------------------
+    # Public inspection helpers
+    # ------------------------------------------------------------------
+
+    def get_most_frequent_words(self, start: int = 0, end: int = 10) -> dict[str, float]:
+        with self._lock:
+            total: dict[str, float] = defaultdict(float)
+            for dist in self._word_distributions.values():
+                for word, weight in dist.items():
+                    total[word] += weight
+            return dict(sorted(total.items(), key=lambda kv: kv[1], reverse=True)[start:end])
+ 
+    def get_most_frequent_words_by_pos(
+        self, start: int = 0, end: int = 10
+    ) -> dict[str, dict[str, float]]:
+        with self._lock:
+            return {
+                pos: dict(
+                    sorted(dist.items(), key=lambda kv: kv[1], reverse=True)[start:end]
+                )
+                for pos, dist in self._word_distributions.items()
+            }
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _apply_decay(self) -> None:
+        """
+        Scale all stored weights by *decay*.
+
+        Called once per sentence ingested, so older observations lose influence
+        relative to freshly added ones.  No-op when decay is exactly 1.0.
+        """
+        if self._decay == 1.0:
+            return
+
+        for inner in self._pos_transitions.values():
+            for key in inner:
+                inner[key] *= self._decay
+
+        for inner in self._word_distributions.values():
+            for key in inner:
+                inner[key] *= self._decay
+
+    def _update(self, sentence: list[Word]) -> None:
+        """Build trigram POS transitions from a single sentence."""
+        pos_sequence = [START, START]
+
+        for word in sentence:
+            self._word_distributions[word.pos][word.actual_word] += 1.0
+            pos_sequence.append(word.pos)
+
+        pos_sequence.append(END)
+
+        for prev_pos, current_pos, next_pos in zip(
+            pos_sequence,
+            pos_sequence[1:],
+            pos_sequence[2:],
+        ):
+            self._pos_transitions[(prev_pos, current_pos)][next_pos] += 1.0
+
     def _sample_next_pos(self, prev_pos: str, current_pos: str, temperature: float) -> str:
-        """
-        Sample next POS from trigram transition distribution.
-        """
-        candidates = self._pos_transitions[(prev_pos, current_pos)]
+        """Sample the next POS tag from the trigram transition distribution."""
+        candidates = self._pos_transitions.get((prev_pos, current_pos), {})
 
         if not candidates:
             return END
@@ -173,10 +238,8 @@ class PosMarkovModel:
         return random.choices(positions, weights=weights, k=1)[0]
 
     def _sample_word(self, pos: str, temperature: float) -> str:
-        """
-        Sample a word given a POS.
-        """
-        candidates = self._word_distributions[pos]
+        """Sample a surface form for the given POS tag."""
+        candidates = self._word_distributions.get(pos, {})
 
         if not candidates:
             return ""
@@ -194,14 +257,17 @@ class PosMarkovModel:
         temperature: float,
     ) -> str | None:
         """
-        Try to pick a pool word that matches the required POS.
+        Pick a word from *remaining* that matches *pos*, weighted by its
+        learnt frequency (after decay).  Returns None when no eligible word
+        exists.
         """
-        eligible = [w for w in remaining if word_to_pos[w] == pos]
+        dist = self._word_distributions.get(pos, {})
+        eligible = [w for w in remaining if word_to_pos.get(w) == pos]
 
         if not eligible:
             return None
 
-        weights = [self._word_distributions[pos][w] for w in eligible]
+        weights = [dist.get(w, 0.0) for w in eligible]
 
         return random.choices(
             eligible,
@@ -211,31 +277,23 @@ class PosMarkovModel:
 
     def _build_word_to_pos_map(self) -> dict[str, str]:
         """
-        Reverse lookup: word -> POS (best-effort, last-write-wins).
+        Reverse lookup: word -> POS.
+
+        When a word appears under multiple POS tags (e.g. "run" as NN and VB),
+        the tag with the highest current weight wins.
         """
         mapping: dict[str, str] = {}
+        best_weight: dict[str, float] = {}
 
-        for pos, counter in self._word_distributions.items():
-            for word in counter:
-                mapping[word] = pos
+        for pos, dist in self._word_distributions.items():
+            for word, weight in dist.items():
+                if weight > best_weight.get(word, -1.0):
+                    mapping[word] = pos
+                    best_weight[word] = weight
 
         return mapping
 
     @staticmethod
-    def _apply_temperature(weights: list[int], temperature: float) -> list[float]:
+    def _apply_temperature(weights: list[float], temperature: float) -> list[float]:
         return [w ** (1.0 / max(0.01, temperature)) for w in weights]
-
-
-    def get_most_frequent_words(self, start: int = 0, end: int = 10) -> dict[str, int]:
-        with self._lock:
-            total = Counter()
-            for counter in self._word_distributions.values():
-                total.update(counter)
-            return dict(total.most_common(end)[start:])
-
-    def get_most_frequent_words_by_pos(self, start: int = 0, end: int = 10) -> dict[str, dict[str, int]]:
-        with self._lock:
-            return {
-                pos: dict(counter.most_common(end)[start:])
-                for pos, counter in self._word_distributions.items()
-            }
+    

@@ -1,6 +1,6 @@
 from functools import reduce
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from audio.plugins.audio_plugins import AudioPlugin
@@ -43,7 +43,8 @@ class Mixer:
     def __init__(
             self,
             logger: Logger,
-            post_mixer_chain: list[AudioPlugin] = [],
+            post_mixer_chain_phone: list[AudioPlugin] = [],
+            post_mixer_chain_speaker: list[AudioPlugin] = [],
             sample_rate: int = SAMPLERATE,
             blocksize: int = PLAYBACK_BLOCKSIZE,
         ) -> None:
@@ -54,7 +55,8 @@ class Mixer:
         self.telephone_channel = PHONE_CHANNEL
         self.speaker_channel = SPEAKER_CHANNEL
 
-        self.post_mixer_chain: list[AudioPlugin] = post_mixer_chain
+        self.post_mixer_chain_phone: list[AudioPlugin] = post_mixer_chain_phone
+        self.post_mixer_chain_speaker: list[AudioPlugin] = post_mixer_chain_speaker
 
         self._audio_queue: list[list[AudioQueueElement]] = [[], []]
         self._lock = threading.Lock()
@@ -72,21 +74,20 @@ class Mixer:
         self._stream.start()
 
     def _callback(
-            self,
-            outdata: NDArray[np.float32],
-            frames: int,
-            time: object,
-            status: sd.CallbackFlags,
-        ) -> None:
+        self,
+        outdata: NDArray[np.float32],
+        frames: int,
+        time: object,
+        status: sd.CallbackFlags,
+    ) -> None:
         to_speaker = np.zeros((frames, self.channels), dtype=np.float32)
 
-        # We process however many frames we process, thank you SoundDevice
         with self._lock:
             for channel in (0, 1):
                 play_head = 0
 
                 for audio_to_play in self._audio_queue[channel]:
-                    if play_head >= frames: # nvm
+                    if play_head >= frames:
                         break
 
                     samples_needed = frames - play_head
@@ -100,12 +101,17 @@ class Mixer:
                     audio_to_play.pos += samples_to_copy
                     play_head += samples_to_copy
 
-                # Update the remaining audio
                 self._audio_queue[channel] = [b for b in self._audio_queue[channel] if b.pos < len(b.audio)]
                 self._frames_played[channel] += play_head
 
-        # Doing my favorite thing ever
-        to_speaker = reduce(lambda audio, plugin: plugin.process(audio), self.post_mixer_chain, to_speaker)
+        chains = [self.post_mixer_chain_phone, self.post_mixer_chain_speaker]
+        for channel, chain in enumerate(chains):
+            to_speaker[:, channel] = reduce(
+                lambda audio, plugin: plugin.process(audio),
+                chain,
+                to_speaker[:, channel],
+            )
+
         outdata[:] = to_speaker
 
     def _queue_audio(
