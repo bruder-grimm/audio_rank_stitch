@@ -10,8 +10,8 @@ from config import WHISPERX_SAMPLERATE, AUDIO_SNIPPET_POST_BUFFER, AUDIO_SNIPPET
 from scipy.signal import resample_poly
 from math import gcd
 
-from util.Logger import Logger
-from util.Result import Failure, Result, Success
+from util.logger import Logger
+from util.result import Failure, Result, Success
 
 class NoTranscriptionError(Exception):
     pass
