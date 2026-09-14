@@ -9,7 +9,7 @@ from typing import Optional
 from util.logger import Logger
 import sounddevice as sd
 import numpy as np
-from util.result import Failure, Result, Success
+from util.Result import Failure, Result, Success
 
 class RecordingError(Exception):
     pass

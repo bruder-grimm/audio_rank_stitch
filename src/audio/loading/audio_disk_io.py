@@ -4,7 +4,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import DefaultDict
+from typing import DefaultDict, List
 
 from audio.loading.filename import get_key_from_word
 import numpy as np
@@ -13,7 +13,7 @@ from scipy.io import wavfile
 import pyloudnorm as pyln
 
 from util.logger import Logger
-from util.result import Failure, Result, Success
+from util.Result import Failure, Result, Success
 
 class NoRecordingsError(Exception):
     pass
@@ -59,32 +59,60 @@ class DiskIO:
 
         self.logger.debug(f"DiskIO buffer built with recordings for {len(self.buffer)} words")
 
-    def get_latest_raw_recording(self) -> Result[NDArray[np.float32], Exception]:
-        try:
-            raw_files = [
-                f for f in self.path.iterdir()
-                if f.is_file()
-                and f.suffix.lower() == ".wav"
-                and f.name.startswith("raw_")
-            ]
+    def _get_raw_recordings(self) -> Result[List[Path], NoRecordingsError]:
+        raw_files = [
+            f for f in self.path.iterdir()
+            if f.is_file()
+            and f.suffix.lower() == ".wav"
+            and f.name.startswith("raw_")
+        ]
 
-            if not raw_files:
-                return Failure(NoRecordingsError("No raw recordings found"))
-            
-            latest_file = max(
+        if not raw_files:
+            return Failure(NoRecordingsError("No raw recordings found"))
+
+        return Success(raw_files)
+
+    def get_latest_raw_recording(self) -> Result[NDArray[np.float32], Exception]:
+        latest_file = self._get_raw_recordings().map(
+            lambda raw_files: max(
                 raw_files,
                 key=lambda f: int(f.stem.removeprefix("raw_"))
-            )
+                )
+        ).map(wavfile.read)
 
-            samplerate, audio = wavfile.read(latest_file)
-
+        if (latest_file.is_success()):
+            samplerate, audio = latest_file.get_value()
             if samplerate != self.sampling_rate:
                 return Failure(SamplingRateMismatch(f"Expected {self.sampling_rate}, got {samplerate}")
             )
             return Success(np.asarray(audio, dtype=np.float32))
+            
+        return Failure(latest_file.get_error())
+
+    def delete_old_raw_recordings(self) -> Result[None, Exception]:
+        raw_files = self._get_raw_recordings()
+
+        if raw_files.is_failure():
+            return Failure("No old waves to delete")
+
+        raw_files = raw_files.get_value()
+
+        latest_file = max(
+            raw_files,
+            key=lambda f: int(f.stem.removeprefix("raw_"))
+        )
+
+        try:
+            for file in raw_files:
+                if file != latest_file:
+                    self.logger.info(f"Deleting ${file}")
+                    file.unlink()
+
+            return Success(None)
 
         except Exception as exc:
             return Failure(exc)
+
 
 
     def load_waves_for(self, word: str) -> Result[list[NDArray[np.float32]], Exception]:
@@ -143,15 +171,15 @@ class DiskIO:
             return Failure(exc)
 
     def save_wave(self, audio: NDArray[np.float32]) -> Result[int, Exception]:
-        """Save a single waveform to disk in a background thread without blocking."""
+        """Save a single waveform to disk"""
         try:
             self.path.mkdir(parents=True, exist_ok=True)
             file_path = self.path / f"raw_{time.time_ns()}.wav"
-            self.logger.debug(f"Scheduling async save for {file_path}")
+            self.logger.debug(f"Saving wave at {file_path}")
             wavfile.write(file_path, self.sampling_rate, audio)
             return Success(1)
         except Exception as exc:
-            self.logger.error(f"Encountered error while scheduling async save: {exc}")
+            self.logger.error(f"Encountered error while saving wave: {exc}")
             return Failure(exc)
         
     def save_transcription(self, transcription: str) -> Result[int, Exception]:
@@ -238,23 +266,30 @@ class DiskIO:
             wav=audio_array,
             path=path,
         )
-
+    
     def _buffered_write(self, word: str, path: Path, audio: NDArray[np.float32]) -> None:
-        timestamp = int(path.stem.split("_")[0])
-        audio_copy = np.asarray(audio, dtype=np.float32).copy()
-        
-        # For normalization: measure the loudness first 
-        loudness = self.meter.integrated_loudness(audio_copy)
+        audio = np.asarray(audio, dtype=np.float32).copy()
+        if not audio.size:
+            self.logger.warning("Skipping empty audio: %s", path)
+            return
 
-        # loudness normalize audio to -12 dB LUFS
-        loudness_normalized_audio = pyln.normalize.loudness(audio_copy, loudness, -12.0)
+        timestamp = int(path.stem.split("_")[0])
+        block_samples = int(self.meter.block_size * self.sampling_rate)
+
+        if len(audio) > block_samples:
+            loudness = self.meter.integrated_loudness(audio)
+            if np.isfinite(loudness):
+                audio = pyln.normalize.loudness(audio, loudness, -12.0)
+                peak = np.max(np.abs(audio))
+                if peak > 1.0:
+                    audio /= peak
+            else:
+                self.logger.warning("Invalid loudness for %s", path)
 
         self.buffer[word].append(
-            Recording(
-                sampling_rate=self.sampling_rate,
-                timestamp=timestamp,
-                wav=loudness_normalized_audio,
-                path=path,
-            )
+            Recording(self.sampling_rate, timestamp, audio, path)
         )
-        wavfile.write(path, self.sampling_rate, loudness_normalized_audio)
+
+        wavfile.write(path, self.sampling_rate, audio)
+
+

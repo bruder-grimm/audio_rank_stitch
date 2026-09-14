@@ -16,6 +16,7 @@ from audio.plugins.compressor import Compressor
 from audio.plugins.lowpass_filter import LowPassFilter
 from audio.telephone_playback import TelephonePlayer
 from audio.telephone_record import Recorder
+from audio.speech_detection import SpeechDetector
 from audio.audio_transcription import Transcribe
 from audio.speaker_playback import SpeakerPlayer
 from ranking.embedding import PosEmbeddingProvider
@@ -81,6 +82,8 @@ def main():
     telephone_recorder = Recorder(samplerate=SAMPLERATE, channels=1, logger=logger)
     telephone_player = TelephonePlayer(mixer, samplerate=SAMPLERATE)
     transcriber = Transcribe(batch_size = 8, logger=logger, samplerate=SAMPLERATE, device="cpu")
+    speech_detector = SpeechDetector(samplerate=SAMPLERATE)
+
     recording_frontend = RecordingFrontend(
         recorder=telephone_recorder, 
         app_state=app_state,
@@ -111,6 +114,7 @@ def main():
             telephone_player,
             telephone_recorder,
             transcriber,
+            speech_detector,
             recording_frontend,
             logger,
         ),
