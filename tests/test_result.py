@@ -1,4 +1,4 @@
-from util.result import Failure, Success
+from util.Result import Failure, Success
 
 
 def test_success_and_failure_behaviors():

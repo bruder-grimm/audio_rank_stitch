@@ -8,12 +8,17 @@ from audio.loading.filename import get_key_from_word
 from audio.telephone_playback import TelephonePlayer
 from audio.telephone_record import Recorder
 from audio.audio_transcription import Transcribe
+from audio.speech_detection import SpeechDetector
 from numpy.typing import NDArray
 from ui.telephone_recording_server import RecordingFrontend
 from util.logger import Logger
 from app_state import AppState
 import numpy as np
 from config import PRE_DIAL_DELAY_SECONDS, POST_RECORDING_PROCESSING_DELAY_SECONDS
+
+from concurrent.futures import ThreadPoolExecutor
+
+executor = ThreadPoolExecutor(max_workers=4)
 
 
 def run_record_worker(
@@ -22,6 +27,7 @@ def run_record_worker(
     phone_player: TelephonePlayer,
     phone_recorder: Recorder,
     transcriber: Transcribe,
+    speech_detector: SpeechDetector,
     flask_frontend: RecordingFrontend,
     logger: Logger,
 ) -> None:
@@ -83,31 +89,43 @@ def run_record_worker(
         # We're done recording, process the audio
         flask_frontend.set_background_color("#000000")
         
-        start_time = time.time()
         possible_next_recording = phone_recorder.stop_and_get_recording()
-
-        possible_next_recording.foreach(
-            lambda recording: process_recording(recording, disk_io, transcriber, app_state, logger),
-            lambda exception: logger.error(f"Couldn't get recording: {exception}")
+        
+        # If the next recording was successful, we check if it contains speech.
+        # If so, we transcribe, set it as the next recording to listen to
+        # And then delete the old recordings!
+        possible_next_recording = possible_next_recording.flat_map(
+            speech_detector.contains_speech
         )
 
-        last_recording = possible_next_recording.get_value() if possible_next_recording.is_success() else last_recording
-        processing_time = time.time() - start_time
+        if possible_next_recording.is_success():
+            next_recording = possible_next_recording.get_value()
+            executor.submit(
+                process_recording,
+                next_recording,
+                disk_io,
+                transcriber,
+                app_state,
+                logger
+            )
+
+            last_recording = next_recording
+
+            deleted_old_recordings = disk_io.delete_old_raw_recordings()
+            if deleted_old_recordings.is_failure():
+                logger.info(f"Deleting old recordings failed: {deleted_old_recordings.get_error()}")
 
         # If processing the recording failed, log the error and revert to idle state
         if possible_next_recording.is_failure():
-            logger.error(f"Failed to process recording: {possible_next_recording.get_error()}")
+            logger.info(f"Failed to process recording: {possible_next_recording.get_error()}")
             revert_to_idle_state(flask_frontend, phone_player)
             continue
         
-        logger.debug(f"Processing time for recording: {processing_time:.2f} seconds")
-
-        # Otherwise, we successfully processed the recording and can now taint the player
+        # Otherwise, we successfully processed the recording and 
         # and update the instruction for the next person
         app_state.cycle_instruction()
-        app_state.playback_dirty.set()
 
-        threading.Event().wait(max(0, POST_RECORDING_PROCESSING_DELAY_SECONDS - processing_time))
+        threading.Event().wait(max(0, POST_RECORDING_PROCESSING_DELAY_SECONDS))
         flask_frontend.set_background_color("#ffffff")
     
     logger.info("Record worker shutting down...")
@@ -127,7 +145,8 @@ def process_recording(
     disk_io.save_wave(recording).on_failure(
         lambda error: logger.error(f"Failed to save full recording: {error}")
     )
-    
+    start_time = time.time()
+
     transcription = transcriber.transcribe(recording)
     if transcription.is_failure():
         logger.error(f"Transcription failed: {transcription.get_error()}")
@@ -140,7 +159,11 @@ def process_recording(
     )
 
     transcript, alignment_result = transcription.get_value()
-    words_with_audio = transcriber.get_words_with_audio(recording, alignment_result)
+    words_with_audio = transcriber.get_words_with_audio(
+        recording,
+        alignment_result,
+    )
+
 
     vocabulary = list(words_with_audio.keys())
     vocabulary = [get_key_from_word(word) for word in vocabulary]
@@ -157,5 +180,9 @@ def process_recording(
     app_state.markov_model.update(classified_words)
     app_state.rankings.update(classified_words)
     app_state.rankings.heapify()
+    app_state.playback_dirty.set()
+
+    processing_time = time.time() - start_time
+    logger.debug(f"Processing time for recording: {processing_time:.2f} seconds")
 
     logger.info(f"Sentence transcribed: {transcript}")

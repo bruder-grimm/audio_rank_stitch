@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 from scipy.io import wavfile
 from util.logger import Logger, LogLevel
-from util.result import Failure, Success
+from util.Result import Failure, Success
 from audio.loading.audio_disk_io import DiskIO, NoRecordingsError, SamplingRateMismatch
 
 

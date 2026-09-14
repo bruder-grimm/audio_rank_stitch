@@ -11,7 +11,7 @@ from scipy.signal import resample_poly
 from math import gcd
 
 from util.logger import Logger
-from util.result import Failure, Result, Success
+from util.Result import Failure, Result, Success
 
 class NoTranscriptionError(Exception):
     pass
@@ -41,25 +41,58 @@ class Transcribe:
             language_code=language, device=self.device
         )
 
-    def transcribe(self, audio: NDArray[float32]) -> Result[tuple[str, dict], NoTranscriptionError]:
-        """
-        Transcribe float32 numpy audio to text with alignment.
-        Returns dict with 'text' and 'segments' (including word timestamps).
-        """
-        
-        # Right, so this is a whole can of worms
-        # 1. We convert, cast, and flatten, and then resample our audio data
-        #   whisperx needs float32, and (time, ) as shape
-        
-        # audio_float32 = audio.astype(np.float32) / 32768.0
+    def transcribe(
+        self,
+        audio: NDArray[float32],
+    ) -> Result[tuple[str, dict], NoTranscriptionError]:
+        """Transcribe and align audio, transparently chunking long recordings."""
+        chunk_size = self.sample_rate * 60
+
+        if len(audio) <= chunk_size:
+            return self._transcribe_chunk(audio)
+
+        transcripts = []
+        segments = []
+
+        for start in range(0, len(audio), chunk_size):
+            result = self._transcribe_chunk(audio[start:start + chunk_size])
+
+            if result.is_failure():
+                return result
+
+            transcript, alignment = result.get_value()
+            offset = start / self.sample_rate
+
+            transcripts.append(transcript)
+            for segment in alignment["segments"]:
+                self._offset_timestamps(segment, offset)
+                segments.append(segment)
+
+        return Success((
+            " ".join(transcripts),
+            {"segments": segments},
+        ))
+
+
+    def _transcribe_chunk(
+        self,
+        audio: NDArray[float32],
+    ) -> Result[tuple[str, dict], NoTranscriptionError]:
+        """Transcribe and align a single audio chunk."""
         resampled_audio = self._resample(audio.copy())
 
         if resampled_audio.ndim == 2:
-            resampled_audio = resampled_audio.squeeze(1)  # (time, 1) -> (time,)
-        
-        self.logger.debug(f"Audio shape: {audio.shape}, dtype: {audio.dtype}, min: {audio.min():.3f}, max: {audio.max():.3f}")
+            resampled_audio = resampled_audio.squeeze(1)
 
-        # 2. We transcribe with this new 1D array
+        self.logger.debug(
+            f"Audio shape: {audio.shape}, dtype: {audio.dtype}, "
+            f"min: {audio.min():.3f}, max: {audio.max():.3f}"
+        )
+        self.logger.debug(
+            f"Processing {len(audio) / self.sample_rate:.2f}s "
+            f"({audio.nbytes / 1024 / 1024:.1f} MB)"
+        )
+
         result = self.transcription_model.transcribe(
             resampled_audio,
             batch_size=self.batch_size,
@@ -67,32 +100,39 @@ class Transcribe:
             task="transcribe",
         )
 
-        # Bonus: we fail
-        if len(result["segments"]) == 0:
-            self.logger.error("Coulnt' transcribe audio")
-            return Failure(NoTranscriptionError())
-        
-        # ...unless 👀
-        try:
-            transcript = result["segments"][0]["text"]
-            self.logger.debug(f"Successfully transcribed:\n {transcript}")
-        except Exception as e:
+        if not result["segments"]:
+            self.logger.error("Couldn't transcribe audio")
             return Failure(NoTranscriptionError())
 
-        # 3. We align
-        result_aligned = whisperx.align(
+        transcript = " ".join(
+            segment["text"].strip()
+            for segment in result["segments"]
+            if segment.get("text")
+        )
+
+        aligned = whisperx.align(
             result["segments"],
             self.alignment_model,
             self.metadata,
             resampled_audio,
             self.device,
-            return_char_alignments=False
+            return_char_alignments=False,
         )
 
-        self.logger.debug(f"Successfully aligned: \n {result_aligned['segments']}")
         del resampled_audio
 
-        return Success((transcript, result_aligned))  # Return the full dict for access to timestamps
+        return Success((transcript, aligned))
+
+
+    @staticmethod
+    def _offset_timestamps(segment: dict, offset: float) -> None:
+        """Convert chunk-relative timestamps to recording-relative timestamps."""
+        for item in [segment, *segment.get("words", [])]:
+            if item.get("start") is not None:
+                item["start"] += offset
+            if item.get("end") is not None:
+                item["end"] += offset
+
 
     def get_words_with_audio(
             self, 
